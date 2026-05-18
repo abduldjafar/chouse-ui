@@ -735,7 +735,11 @@ export default function HomePage() {
                     {q.query.slice(0, 120)}
                   </p>
                   <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
-                    {q.duration < 1 ? "<1" : q.duration.toFixed(0)} ms
+                    {(() => {
+                      const d = Number(q.duration);
+                      if (!Number.isFinite(d)) return "—";
+                      return d < 1 ? "<1" : d.toFixed(0);
+                    })()} ms
                   </span>
                 </div>
               ))}

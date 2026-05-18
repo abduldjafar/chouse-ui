@@ -1054,72 +1054,72 @@ export default function Metrics({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
-                className="rounded-md border border-ink-500 bg-ink-100 p-6 h-full"
+                className="rounded-xs border border-ink-500 bg-ink-100 p-6 h-full"
               >
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-xs border border-ink-500 bg-ink-200">
-                    <Activity className="h-5 w-5 text-blue-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Resource Utilization</h3>
-                    <p className="text-xs text-gray-500">Current system resource usage</p>
+                  <span className="grid h-9 w-9 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-muted">
+                    <Activity className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <h3 className="text-[14px] font-semibold tracking-tight text-paper">Resource utilization</h3>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Current system resource usage</p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   {/* CPU */}
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">CPU Usage</span>
-                      <span className="text-white font-medium">
+                    <div className="flex justify-between font-mono text-[11px] uppercase tracking-[0.14em]">
+                      <span className="text-paper-dim">CPU</span>
+                      <span className="font-semibold tabular-nums text-paper">
                         {((cpuBreakdownData?.values[0]?.slice(-1)[0] || 0) + (cpuBreakdownData?.values[1]?.slice(-1)[0] || 0)).toFixed(1)}%
                       </span>
                     </div>
                     <Progress
                       value={(cpuBreakdownData?.values[0]?.slice(-1)[0] || 0) + (cpuBreakdownData?.values[1]?.slice(-1)[0] || 0)}
                       className={cn(
-                        "h-2 bg-white/10",
+                        "h-1.5 bg-ink-200",
                         ((cpuBreakdownData?.values[0]?.slice(-1)[0] || 0) + (cpuBreakdownData?.values[1]?.slice(-1)[0] || 0)) > 80 ? "[&>div]:bg-red-500" :
-                          ((cpuBreakdownData?.values[0]?.slice(-1)[0] || 0) + (cpuBreakdownData?.values[1]?.slice(-1)[0] || 0)) > 60 ? "[&>div]:bg-orange-500" : "[&>div]:bg-emerald-500"
+                          ((cpuBreakdownData?.values[0]?.slice(-1)[0] || 0) + (cpuBreakdownData?.values[1]?.slice(-1)[0] || 0)) > 60 ? "[&>div]:bg-amber-500" : "[&>div]:bg-brand"
                       )}
                     />
                   </div>
 
                   {/* Disk */}
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Disk Usage</span>
-                      <span className="text-white font-medium">
+                    <div className="flex justify-between font-mono text-[11px] uppercase tracking-[0.14em]">
+                      <span className="text-paper-dim">Disk</span>
+                      <span className="font-semibold tabular-nums text-paper">
                         {primaryDisk ? primaryDisk.used_percent.toFixed(1) : "0"}%
                       </span>
                     </div>
                     <Progress
                       value={primaryDisk?.used_percent || 0}
                       className={cn(
-                        "h-2 bg-white/10",
+                        "h-1.5 bg-ink-200",
                         (primaryDisk?.used_percent || 0) > 90 ? "[&>div]:bg-red-500" :
-                          (primaryDisk?.used_percent || 0) > 75 ? "[&>div]:bg-orange-500" : "[&>div]:bg-cyan-500"
+                          (primaryDisk?.used_percent || 0) > 75 ? "[&>div]:bg-amber-500" : "[&>div]:bg-brand"
                       )}
                     />
                   </div>
 
                   {/* Memory */}
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Memory Usage</span>
-                      <span className="text-white font-medium">
+                    <div className="flex justify-between font-mono text-[11px] uppercase tracking-[0.14em]">
+                      <span className="text-paper-dim">Memory</span>
+                      <span className="font-semibold tabular-nums text-paper">
                         {stats?.memoryPercentage?.toFixed(1) || 0}%
                       </span>
                     </div>
                     <Progress
                       value={stats?.memoryPercentage || 0}
                       className={cn(
-                        "h-2 bg-white/10",
+                        "h-1.5 bg-ink-200",
                         (stats?.memoryPercentage || 0) > 90 ? "[&>div]:bg-red-500" :
-                          (stats?.memoryPercentage || 0) > 75 ? "[&>div]:bg-orange-500" : "[&>div]:bg-purple-500"
+                          (stats?.memoryPercentage || 0) > 75 ? "[&>div]:bg-amber-500" : "[&>div]:bg-brand"
                       )}
                     />
-                    <div className="flex justify-between text-xs text-gray-500">
+                    <div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
                       <span>{stats?.memoryUsage?.toFixed(2) || "0"} GB used</span>
                       <span>{stats?.memoryTotal?.toFixed(2) || "0"} GB total</span>
                     </div>
@@ -1132,42 +1132,42 @@ export default function Metrics({
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="rounded-md border border-ink-500 bg-ink-100 p-6 h-full"
+                className="rounded-xs border border-ink-500 bg-ink-100 p-6 h-full"
               >
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-xs border border-ink-500 bg-ink-200">
-                    <Zap className="h-5 w-5 text-amber-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-white">Activity Summary</h3>
-                    <p className="text-xs text-gray-500">Real-time system activity</p>
+                  <span className="grid h-9 w-9 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-muted">
+                    <Zap className="h-4 w-4" aria-hidden />
+                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <h3 className="text-[14px] font-semibold tracking-tight text-paper">Activity summary</h3>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Real-time system activity</p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="text-2xl font-bold text-white mb-1">
+                <div className="grid grid-cols-2 border-l border-t border-ink-500">
+                  <div className="border-b border-r border-ink-500 p-4">
+                    <div className="font-mono text-[20px] font-semibold tabular-nums text-paper">
                       {formatCompactNumber(metrics?.queriesPerSecond?.values?.slice(-1)[0] || 0)}
                     </div>
-                    <div className="text-xs text-gray-500">Queries/s</div>
+                    <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">Queries/s</div>
                   </div>
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="text-2xl font-bold text-white mb-1">
+                  <div className="border-b border-r border-ink-500 p-4">
+                    <div className="font-mono text-[20px] font-semibold tabular-nums text-paper">
                       {Number(prodMetrics?.merges?.merges_running || 0).toFixed(2)}
                     </div>
-                    <div className="text-xs text-gray-500">Active Merges</div>
+                    <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">Active merges</div>
                   </div>
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="text-2xl font-bold text-white mb-1">
+                  <div className="border-b border-r border-ink-500 p-4">
+                    <div className="font-mono text-[20px] font-semibold tabular-nums text-paper">
                       {prodMetrics?.resources?.background_pool_tasks || 0}
                     </div>
-                    <div className="text-xs text-gray-500">Background Tasks</div>
+                    <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">Background tasks</div>
                   </div>
-                  <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                    <div className="text-2xl font-bold text-white mb-1">
+                  <div className="border-b border-r border-ink-500 p-4">
+                    <div className="font-mono text-[20px] font-semibold tabular-nums text-paper">
                       {formatCompactNumber(prodMetrics?.merges?.merged_rows_per_sec || 0)}
                     </div>
-                    <div className="text-xs text-gray-500">Merged Rows/s</div>
+                    <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">Merged rows/s</div>
                   </div>
                 </div>
               </motion.div>
@@ -1178,26 +1178,28 @@ export default function Metrics({
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3 }}
-                  className="rounded-2xl border border-red-500/20 bg-red-500/5 backdrop-blur-xl p-6 h-full"
+                  className="rounded-xs border border-red-900/60 bg-red-950/20 p-6 h-full"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5 text-red-400" />
-                      <h3 className="font-semibold text-white">Recent Errors</h3>
+                    <div className="flex items-center gap-3">
+                      <span className="grid h-9 w-9 place-items-center rounded-xs border border-red-900/60 bg-red-950/40 text-red-300">
+                        <AlertTriangle className="h-4 w-4" aria-hidden />
+                      </span>
+                      <h3 className="text-[14px] font-semibold tracking-tight text-paper">Recent errors</h3>
                     </div>
-                    <Badge variant="destructive" className="bg-red-500/20 text-red-400 hover:bg-red-500/30">
-                      {prodMetrics.errors.length} Issues
-                    </Badge>
+                    <span className="inline-flex items-center gap-1 rounded-xs border border-red-900/60 bg-red-950/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-red-300">
+                      {prodMetrics.errors.length} issues
+                    </span>
                   </div>
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {prodMetrics.errors.slice(0, 3).map((err, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-red-500/10 border border-red-500/10">
-                        <span className="text-sm font-medium text-red-400 truncate max-w-[180px]" title={err.exception_name}>
+                      <div key={idx} className="flex items-center justify-between rounded-xs border border-red-900/60 bg-red-950/30 px-3 py-2">
+                        <span className="truncate font-mono text-[12px] text-red-200 max-w-[180px]" title={err.exception_name}>
                           {err.exception_name}
                         </span>
-                        <Badge variant="secondary" className="bg-red-950/30 text-red-300">
+                        <span className="rounded-xs border border-red-900/60 bg-red-950/40 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-red-300">
                           {err.count}
-                        </Badge>
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1210,36 +1212,38 @@ export default function Metrics({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
                 className={cn(
-                  "rounded-md border border-ink-500 bg-ink-100 p-6 h-full",
+                  "rounded-xs border border-ink-500 bg-ink-100 p-6 h-full",
                   (prodMetrics?.errors && prodMetrics.errors.length > 0) ? "" : "md:col-span-2"
                 )}
               >
                 <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Table2 className="h-5 w-5 text-purple-400" />
-                    <h3 className="font-semibold text-white">Largest Tables</h3>
+                  <div className="flex items-center gap-3">
+                    <span className="grid h-9 w-9 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-muted">
+                      <Table2 className="h-4 w-4" aria-hidden />
+                    </span>
+                    <h3 className="text-[14px] font-semibold tracking-tight text-paper">Largest tables</h3>
                   </div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {prodMetrics?.topTables?.slice(0, 5).map((table, idx) => (
-                    <div key={idx} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
+                    <div key={idx} className="flex items-center justify-between border-b border-ink-500 py-2 last:border-0">
                       <div className="flex items-center gap-3">
-                        <span className="text-xs text-gray-500 w-4">{idx + 1}.</span>
+                        <span className="w-5 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">{String(idx + 1).padStart(2, "0")}</span>
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-white">{table.table}</span>
-                          <span className="text-xs text-gray-500">{table.database}</span>
+                          <span className="text-[13px] font-medium text-paper">{table.table}</span>
+                          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">{table.database}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs text-gray-400">{formatCompactNumber(table.rows)} rows</span>
-                        <Badge variant="secondary" className="bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-[11px] tabular-nums text-paper-dim">{formatCompactNumber(table.rows)} rows</span>
+                        <span className="rounded-xs border border-ink-500 bg-ink-200 px-1.5 py-0.5 font-mono text-[10px] tabular-nums text-paper-muted">
                           {table.compressed_size}
-                        </Badge>
+                        </span>
                       </div>
                     </div>
                   ))}
                   {(!prodMetrics?.topTables || prodMetrics.topTables.length === 0) && (
-                    <div className="text-center py-4 text-gray-500 text-sm">No tables found</div>
+                    <div className="py-4 text-center font-mono text-[11px] uppercase tracking-[0.18em] text-paper-dim">No tables found</div>
                   )}
                 </div>
               </motion.div>
