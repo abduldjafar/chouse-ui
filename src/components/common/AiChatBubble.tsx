@@ -1773,15 +1773,16 @@ export default function AiChatBubble() {
                                                 </button>
                                             </div>
                                         ) : messages.length === 0 ? (
-                                            /* Thread selected but empty */
-                                            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-                                                <div className="mb-4 grid h-12 w-12 place-items-center rounded-md border border-ink-500 bg-ink-200">
-                                                    <Bot className="h-5 w-5 text-paper-muted" aria-hidden />
-                                                </div>
-                                                <p className="mb-6 text-[13px] text-paper-muted">
-                                                    Ask me anything about your ClickHouse databases.
-                                                </p>
-                                                <div className="w-full max-w-md">
+                                            /* Thread selected but empty — compact top-aligned, leaves space for input below */
+                                            <div className="flex flex-col items-start gap-5 px-6 pt-10">
+                                                <span className="inline-flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-paper-dim">
+                                                    <span className="h-px w-6 bg-ink-700" aria-hidden />
+                                                    New conversation
+                                                </span>
+                                                <h3 className="text-[15px] font-medium leading-snug text-paper">
+                                                    Ask anything about your ClickHouse databases.
+                                                </h3>
+                                                <div className="w-full">
                                                     <div className={`grid gap-2 ${useSingleColPrompt ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                                         {visiblePrompts.map((sp) => (
                                                             <button
@@ -1791,18 +1792,17 @@ export default function AiChatBubble() {
                                                                 className="group flex items-center gap-2.5 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5 text-left transition-colors hover:border-ink-700 hover:bg-ink-300"
                                                             >
                                                                 <sp.icon className="h-3 w-3 shrink-0 text-paper-dim transition-colors group-hover:text-brand" aria-hidden />
-                                                                <span className="text-xs text-zinc-500 group-hover:text-zinc-200 transition-colors">{sp.label}</span>
+                                                                <span className="text-[12px] text-paper-muted transition-colors group-hover:text-paper">{sp.label}</span>
                                                             </button>
                                                         ))}
                                                     </div>
                                                     <button
+                                                        type="button"
                                                         onClick={() => setShuffleKey(Date.now())}
-                                                        className="flex items-center gap-1.5 mx-auto mt-2.5 px-3 py-1.5 rounded-lg
-                                                     text-[11px] text-zinc-600 hover:text-zinc-300
-                                                     hover:bg-white/[0.04] transition-all duration-200"
+                                                        className="mt-2.5 inline-flex items-center gap-1.5 rounded-xs px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint transition-colors hover:bg-ink-200 hover:text-paper"
                                                         title="Show different suggestions"
                                                     >
-                                                        <Shuffle className="w-3 h-3" />
+                                                        <Shuffle className="h-3 w-3" />
                                                         More suggestions
                                                     </button>
                                                 </div>
