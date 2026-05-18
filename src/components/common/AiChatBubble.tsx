@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, type FormEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
-import { motion, AnimatePresence, useDragControls, type PanInfo } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useWindowSize, type Breakpoint } from '@/hooks/useWindowSize';
 import { useDeviceType } from '@/hooks/useDeviceType';
 import {
@@ -92,12 +92,12 @@ import {
 // Resize constants
 // ============================================
 
-const DEFAULT_DESKTOP_WIDTH = 1340;
-const DEFAULT_DESKTOP_HEIGHT = 840;
-const MIN_WIDTH = 400;
-const MIN_HEIGHT = 360;
-const ZOOM_MIN = 0.55;
-const ZOOM_MAX = 1.0;
+// Right-edge side-sheet widths (cycled by header toggle, resizable from left edge)
+const SHEET_WIDTH_COMPACT = 420;
+const SHEET_WIDTH_STANDARD = 560;
+const SHEET_WIDTH_WIDE = 760;
+const MIN_SHEET_WIDTH = 360;
+const MAX_SHEET_WIDTH_RATIO = 0.7; // never exceed 70% of viewport width
 
 // Register highlight.js languages
 hljs.registerLanguage('sql', sql);
@@ -869,36 +869,8 @@ export default function AiChatBubble() {
     const [isOpen, setIsOpen] = useState(false);
     const [showSidebar, setShowSidebar] = useState(false);
 
-    // Position and size state (device-aware; defaults applied in load effect)
-    const [position, setPosition] = useState<{ x: number, y: number }>({ x: 0, y: 0 });
     const lastLoadedDeviceRef = useRef<DeviceType | null>(null);
-    const dragControls = useDragControls();
-
     const deviceType = useDeviceType();
-
-    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    const saveChatPrefsDebounced = useCallback((pos: { x: number, y: number }, size: { width: number, height: number }): void => {
-        try {
-            localStorage.setItem('chouseui-chat-position', JSON.stringify(pos));
-        } catch { /* ignore */ }
-
-        if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-        }
-
-        saveTimeoutRef.current = setTimeout(async () => {
-            try {
-                const current = await rbacUserPreferencesApi.getPreferences();
-                const workspace = current.workspacePreferences as WorkspacePreferencesMap | undefined;
-                const merged = mergeChatPrefsIntoWorkspace(workspace, deviceType, { position: pos, size });
-                await rbacUserPreferencesApi.updatePreferences({ workspacePreferences: merged });
-            } catch (err) {
-                log.error('[AiChatBubble] Failed to save preferences:', err);
-            }
-        }, 1000);
-    }, [deviceType]);
-
 
     // Responsive breakpoint
     const { width: viewportWidth, height: viewportHeight, breakpoint } = useWindowSize();
@@ -906,107 +878,89 @@ export default function AiChatBubble() {
     const isTablet = breakpoint === 'tablet';
     const isDesktop = breakpoint === 'desktop';
 
-    // Resize state (desktop only)
-    const [windowSize, setWindowSize] = useState({ width: DEFAULT_DESKTOP_WIDTH, height: DEFAULT_DESKTOP_HEIGHT });
-    const windowSizeRef = useRef(windowSize);
+    // Sheet width state (desktop & tablet only — mobile is always full screen)
+    const [sheetWidth, setSheetWidth] = useState(SHEET_WIDTH_STANDARD);
+    const sheetWidthRef = useRef(sheetWidth);
     useEffect(() => {
-        windowSizeRef.current = windowSize;
-    }, [windowSize]);
-    const [isResizing, setIsResizing] = useState(false);
-    const resizeRef = useRef<{ axis: 'both' | 'x' | 'y'; startX: number; startY: number; startW: number; startH: number } | null>(null);
+        sheetWidthRef.current = sheetWidth;
+    }, [sheetWidth]);
 
-    // Load preferences (per device type; re-load when device type changes; must run after windowSize is declared)
+    // Max sheet width based on viewport (prevent the sheet from eating the whole screen)
+    const maxSheetWidth = Math.max(MIN_SHEET_WIDTH, Math.floor(viewportWidth * MAX_SHEET_WIDTH_RATIO));
+    const effectiveSheetWidth = Math.min(Math.max(sheetWidth, MIN_SHEET_WIDTH), maxSheetWidth);
+
+    // Persistence — debounced
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const saveChatPrefsDebounced = useCallback((width: number): void => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        saveTimeoutRef.current = setTimeout(async () => {
+            try {
+                const current = await rbacUserPreferencesApi.getPreferences();
+                const workspace = current.workspacePreferences as WorkspacePreferencesMap | undefined;
+                // Keep the prefs API shape (position + size) but pin position to {0,0} and
+                // store the sheet width in size.width — height fills viewport now.
+                const merged = mergeChatPrefsIntoWorkspace(workspace, deviceType, {
+                    position: { x: 0, y: 0 },
+                    size: { width, height: 0 },
+                });
+                await rbacUserPreferencesApi.updatePreferences({ workspacePreferences: merged });
+            } catch (err) {
+                log.error('[AiChatBubble] Failed to save preferences:', err);
+            }
+        }, 1000);
+    }, [deviceType]);
+
+    // Load preferences (per device type)
     useEffect(() => {
         if (!hasPermission || lastLoadedDeviceRef.current === deviceType) return;
-
         const loadFromDb = async () => {
             try {
                 const prefs = await rbacUserPreferencesApi.getPreferences();
                 const workspace = prefs.workspacePreferences as WorkspacePreferencesMap | undefined;
-                const { position: loadedPos, size: loadedSize } = getChatPrefsFromWorkspace(workspace, deviceType);
-                setPosition(loadedPos);
-                if (deviceType !== 'mobile' && loadedSize.width > 0 && loadedSize.height > 0) {
-                    setWindowSize(loadedSize);
+                const { size: loadedSize } = getChatPrefsFromWorkspace(workspace, deviceType);
+                if (deviceType !== 'mobile' && loadedSize.width >= MIN_SHEET_WIDTH) {
+                    setSheetWidth(loadedSize.width);
                 }
                 lastLoadedDeviceRef.current = deviceType;
             } catch (err) {
                 log.error('[AiChatBubble] Failed to load preferences:', err);
-                try {
-                    const saved = localStorage.getItem('chouseui-chat-position');
-                    if (saved) setPosition(JSON.parse(saved));
-                } catch { /* ignore */ }
             }
         };
         loadFromDb();
     }, [hasPermission, deviceType]);
 
-    // Compute max constraints based on viewport
-    const maxWidth = Math.min(DEFAULT_DESKTOP_WIDTH, viewportWidth - 40);
-    const maxHeight = Math.min(900, Math.round(viewportHeight * 0.96));
-
-    // Effective window dimensions for desktop
-    const effectiveWidth = Math.min(Math.max(windowSize.width, MIN_WIDTH), maxWidth);
-    const effectiveHeight = Math.min(Math.max(windowSize.height, MIN_HEIGHT), maxHeight);
-
-    // Compute zoom factor for proportional scaling (desktop resize only)
-    const zoomFactor = isDesktop
-        ? Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(effectiveWidth / DEFAULT_DESKTOP_WIDTH, effectiveHeight / DEFAULT_DESKTOP_HEIGHT)))
-        : 1;
-
-    const handleDragEnd = useCallback((_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo): void => {
-        const newPos = {
-            x: position.x + info.offset.x / zoomFactor,
-            y: position.y + info.offset.y / zoomFactor
-        };
-        setPosition(newPos);
-        saveChatPrefsDebounced(newPos, windowSizeRef.current);
-    }, [position, zoomFactor, saveChatPrefsDebounced]);
-
-    // Logical dimensions for internal layout
-    const logicalWidth = isDesktop ? effectiveWidth / zoomFactor : (isTablet ? 680 : viewportWidth);
-    const logicalHeight = isDesktop ? effectiveHeight / zoomFactor : (isTablet ? 840 : viewportHeight);
+    // Logical dimensions for internal layout (no zoom — side-sheet renders at 1:1)
+    const logicalWidth = isMobile ? viewportWidth : effectiveSheetWidth;
+    const logicalHeight = viewportHeight;
 
     // Adaptive internal layout thresholds
-    const hideSidebarThreshold = 900;
-    const singleColPromptThreshold = 600;
+    const hideSidebarThreshold = 720;
+    const singleColPromptThreshold = 520;
+    const shouldHideSidebar = showSidebar && !isMobile && logicalWidth < hideSidebarThreshold;
+    const useSingleColPrompt = isMobile || logicalWidth < singleColPromptThreshold;
 
-    const shouldHideSidebar = showSidebar && isDesktop && logicalWidth < hideSidebarThreshold;
-    const useSingleColPrompt = isMobile || (isDesktop && logicalWidth < singleColPromptThreshold);
-
-    // Resize handlers (desktop and tablet)
-    const handleResizeStart = useCallback((axis: 'both' | 'x' | 'y', e: React.PointerEvent) => {
+    // Width-only resize (drag the left edge of the sheet)
+    const [isResizing, setIsResizing] = useState(false);
+    const resizeRef = useRef<{ startX: number; startW: number } | null>(null);
+    const handleResizeStart = useCallback((e: React.PointerEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        // Prevent default touch behaviors to ensure smooth resizing on mobile/tablet
-        if (e.pointerType === 'touch') {
-            e.preventDefault();
-        }
+        if (e.pointerType === 'touch') e.preventDefault();
         setIsResizing(true);
-        resizeRef.current = {
-            axis,
-            startX: e.clientX,
-            startY: e.clientY,
-            startW: effectiveWidth,
-            startH: effectiveHeight,
-        };
-    }, [effectiveWidth, effectiveHeight]);
+        resizeRef.current = { startX: e.clientX, startW: effectiveSheetWidth };
+    }, [effectiveSheetWidth]);
 
     useEffect(() => {
         if (!isResizing) return;
         const handlePointerMove = (e: globalThis.PointerEvent) => {
             if (!resizeRef.current) return;
-            // Prevent default touch behaviors to ensure smooth resizing on mobile/tablet
-            if (e.pointerType === 'touch') {
-                e.preventDefault();
-            }
-            const { axis, startX, startY, startW, startH } = resizeRef.current;
-            // Coordinate mapping: divide client delta by zoomFactor to get logical delta
-            const dx = axis !== 'y' ? (startX - e.clientX) / zoomFactor : 0;
-            const dy = axis !== 'x' ? (e.clientY - startY) / zoomFactor : 0;
-            setWindowSize({
-                width: Math.min(Math.max(startW + dx * zoomFactor, MIN_WIDTH), maxWidth),
-                height: Math.min(Math.max(startH + dy * zoomFactor, MIN_HEIGHT), maxHeight),
-            });
+            if (e.pointerType === 'touch') e.preventDefault();
+            const { startX, startW } = resizeRef.current;
+            // Dragging left grows the sheet (sheet is anchored to the right edge).
+            const next = Math.min(Math.max(startW + (startX - e.clientX), MIN_SHEET_WIDTH), maxSheetWidth);
+            setSheetWidth(next);
         };
         const handlePointerUp = () => {
             setIsResizing(false);
@@ -1018,17 +972,17 @@ export default function AiChatBubble() {
             window.removeEventListener('pointermove', handlePointerMove);
             window.removeEventListener('pointerup', handlePointerUp);
         };
-    }, [isResizing, maxWidth, maxHeight, zoomFactor]);
+    }, [isResizing, maxSheetWidth]);
 
-    // Save position + size when resize ends (isResizing goes true -> false)
+    // Save width when resize ends
     const prevResizingRef = useRef(false);
     useEffect(() => {
         const wasResizing = prevResizingRef.current;
         prevResizingRef.current = isResizing;
         if (wasResizing && !isResizing) {
-            saveChatPrefsDebounced(position, windowSize);
+            saveChatPrefsDebounced(sheetWidthRef.current);
         }
-    }, [isResizing, position, windowSize, saveChatPrefsDebounced]);
+    }, [isResizing, saveChatPrefsDebounced]);
 
     // Auto-close sidebar on smaller breakpoints
     useEffect(() => {
@@ -1445,104 +1399,48 @@ export default function AiChatBubble() {
                 )
             )}
 
-            {/* Chat Window Container */}
+            {/* Chat Window Container — side-sheet docked to the right edge on desktop/tablet, full-screen on mobile */}
             {isOpen && (
                 <div
                     className="fixed z-50 pointer-events-none"
                     style={isMobile ? {
-                        inset: 0
-                    } : isTablet ? {
-                        top: '50%',
-                        right: '12px',
-                        transform: 'translateY(-50%)',
-                        transformOrigin: '100% 50%',
-                        width: 'min(680px, calc(100vw - 24px))',
-                        height: 'min(840px, 94vh)',
+                        inset: 0,
                     } : {
-                        top: '50%',
-                        right: '20px',
-                        transform: `translateY(-50%) scale(${zoomFactor})`,
-                        transformOrigin: '100% 50%',
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
                         width: `${logicalWidth}px`,
-                        height: `${logicalHeight}px`,
                     }}
                 >
                     <motion.div
-                        drag={true}
-                        dragControls={dragControls}
-                        dragListener={false}
-                        dragMomentum={false}
-                        onDragEnd={handleDragEnd}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1, x: position.x, y: position.y }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        transition={{ duration: 0.2 }}
-                        style={{ touchAction: 'none' }}
-                        className={`pointer-events-auto flex flex-col overflow-hidden bg-ink-100 border-ink-500 shadow-2xl shadow-black/40 w-full h-full
-                                    ${isMobile ? 'border-0 rounded-none animate-[slideUpFull_0.3s_ease-out]' : 'border rounded-md'}`}
+                        initial={isMobile ? { opacity: 0 } : { x: '100%' }}
+                        animate={isMobile ? { opacity: 1 } : { x: 0 }}
+                        exit={isMobile ? { opacity: 0 } : { x: '100%' }}
+                        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                        className={`pointer-events-auto flex flex-col overflow-hidden bg-ink-100 shadow-2xl shadow-black/40 w-full h-full
+                                    ${isMobile ? 'border-0 rounded-none animate-[slideUpFull_0.3s_ease-out]' : 'border-l border-ink-500'}`}
                     >
                         {/* Main content wrapper */}
                         <div className="flex flex-col flex-1 relative w-full h-full">
-                            {/* Desktop/Tablet Resize Handles */}
-                            {!isMobile && !isResizing && (
-                                <>
-                                    <div
-                                        className="ai-chat-resize-corner"
-                                        style={{ touchAction: 'none' }}
-                                        onPointerDown={(e) => {
-                                            if (e.pointerType === 'touch') {
-                                                e.preventDefault();
-                                            }
-                                            handleResizeStart('both', e);
-                                        }}
-                                    />
-                                    <div
-                                        className="ai-chat-resize-left"
-                                        style={{ touchAction: 'none' }}
-                                        onPointerDown={(e) => {
-                                            if (e.pointerType === 'touch') {
-                                                e.preventDefault();
-                                            }
-                                            handleResizeStart('x', e);
-                                        }}
-                                    />
-                                    <div
-                                        className="ai-chat-resize-bottom"
-                                        style={{ touchAction: 'none' }}
-                                        onPointerDown={(e) => {
-                                            if (e.pointerType === 'touch') {
-                                                e.preventDefault();
-                                            }
-                                            handleResizeStart('y', e);
-                                        }}
-                                    />
-                                </>
+                            {/* Left-edge width resize handle (desktop & tablet only) */}
+                            {!isMobile && (
+                                <div
+                                    className={`absolute left-0 top-0 z-30 h-full w-1.5 -translate-x-1/2 cursor-ew-resize ${isResizing ? 'bg-brand/40' : 'hover:bg-brand/30'}`}
+                                    style={{ touchAction: 'none' }}
+                                    onPointerDown={(e) => {
+                                        if (e.pointerType === 'touch') e.preventDefault();
+                                        handleResizeStart(e);
+                                    }}
+                                    aria-label="Resize sheet width"
+                                />
                             )}
-                            {/* Full-screen opaque drag overlay to prevent iframe/selection issues during drag */}
+                            {/* Full-screen overlay to keep pointer events smooth during resize */}
                             {isResizing && (
-                                <div className="fixed inset-0 z-[100] cursor-grabbing" style={{ left: '-100vw', right: '-100vw', top: '-100vh', bottom: '-100vh' }} />
+                                <div className="fixed inset-0 z-[100] cursor-ew-resize" />
                             )}
 
-                            {/* Header — never shrinks; full header is draggable */}
-                            <div
-                                className={`relative z-10 flex-shrink-0 flex items-center justify-between px-4 py-2.5
-                                      bg-ink-200
-                                      border-b border-ink-500
-                                      ${!isResizing ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                                style={!isResizing ? { touchAction: 'none' } : undefined}
-                                aria-label="Drag to move"
-                                title={!isResizing ? 'Drag to move' : undefined}
-                                onPointerDown={
-                                    !isResizing
-                                        ? (e) => {
-                                            const target = e.target instanceof Element ? e.target : null;
-                                            if (target?.closest('button, [role=button], a, input, select, textarea, [role=combobox], [role=listbox]')) return;
-                                            if (e.pointerType === 'touch') e.preventDefault();
-                                            dragControls.start(e);
-                                        }
-                                        : undefined
-                                }
-                            >
+                            {/* Header — never shrinks (sheet is anchored; no longer draggable) */}
+                            <div className="relative z-10 flex-shrink-0 flex items-center justify-between px-4 py-2.5 bg-ink-200 border-b border-ink-500">
                                 <div className="flex items-center gap-3">
                                     <button
                                         type="button"
@@ -1611,19 +1509,24 @@ export default function AiChatBubble() {
                                             </DropdownMenu>
                                         </div>
                                     )}
-                                    {isDesktop && (
+                                    {!isMobile && (
                                         <button
                                             onClick={() => {
-                                                const newSize = windowSize.width >= DEFAULT_DESKTOP_WIDTH * 0.9
-                                                    ? { width: 500, height: 700 }
-                                                    : { width: DEFAULT_DESKTOP_WIDTH, height: DEFAULT_DESKTOP_HEIGHT };
-                                                setWindowSize(newSize);
-                                                saveChatPrefsDebounced(position, newSize);
+                                                // Cycle: compact → standard → wide → compact
+                                                const next = sheetWidth >= SHEET_WIDTH_WIDE
+                                                    ? SHEET_WIDTH_COMPACT
+                                                    : sheetWidth >= SHEET_WIDTH_STANDARD
+                                                        ? SHEET_WIDTH_WIDE
+                                                        : SHEET_WIDTH_STANDARD;
+                                                const clamped = Math.min(next, maxSheetWidth);
+                                                setSheetWidth(clamped);
+                                                saveChatPrefsDebounced(clamped);
                                             }}
                                             className="grid h-7 w-7 place-items-center rounded-xs text-paper-dim transition-colors hover:bg-ink-300 hover:text-paper mr-1"
-                                            title={windowSize.width >= DEFAULT_DESKTOP_WIDTH * 0.9 ? "Compact mode" : "Default size"}
+                                            title={sheetWidth >= SHEET_WIDTH_WIDE ? 'Compact sheet' : sheetWidth >= SHEET_WIDTH_STANDARD ? 'Wide sheet' : 'Standard sheet'}
+                                            aria-label="Cycle sheet width"
                                         >
-                                            {windowSize.width >= DEFAULT_DESKTOP_WIDTH * 0.9 ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                                            {sheetWidth >= SHEET_WIDTH_WIDE ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                                         </button>
                                     )}
                                     <button
