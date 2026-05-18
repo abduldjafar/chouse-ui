@@ -633,8 +633,11 @@ const SqlTab: React.FC<SqlTabProps> = ({ tabId }) => {
   // ── Hint strip items — only the most important actions.
   //    Format / Comment / Find / Save are all accessible via the Shortcuts dialog.
   const stripItems = useMemo(() => {
+    // Explain is a standard ClickHouse feature (EXPLAIN PLAN) — anyone who can
+    // run a query in this editor can also explain it. AI Optimize is the
+    // AI-feature-gated one and stays behind canOptimize.
     const items: { icon: React.ReactNode; label: string; shortcut: string; action: () => void }[] = [
-      ...(canOptimize ? [{ icon: <Network  className="h-3 w-3 shrink-0" />, label: "Explain",     shortcut: kbd("E", { mod: true, shift: true }), action: () => { const q = editorRef.current?.getQuery() ?? ""; if (q) handleExplain(q); } }] : []),
+      { icon: <Network  className="h-3 w-3 shrink-0" />, label: "Explain",     shortcut: kbd("E", { mod: true, shift: true }), action: () => { const q = editorRef.current?.getQuery() ?? ""; if (q) handleExplain(q); } },
       ...(canOptimize ? [{ icon: <Sparkles className="h-3 w-3 shrink-0" />, label: "AI Optimize", shortcut: kbd("I", { mod: true, shift: true }), action: () => { const q = editorRef.current?.getQuery() ?? ""; if (q) handleOptimize(q); } }] : []),
     ];
     return items;
@@ -743,7 +746,7 @@ const SqlTab: React.FC<SqlTabProps> = ({ tabId }) => {
               { icon: <Wand2      className="h-3.5 w-3.5" />, label: "Format query",   hint: kbd("F", { mod: true, shift: true }), action: () => editorRef.current?.format() },
               { icon: <Code2      className="h-3.5 w-3.5" />, label: "Toggle comment", hint: kbd("/", { mod: true }),              action: () => editorRef.current?.commentLine() },
               { icon: <Search     className="h-3.5 w-3.5" />, label: "Find",           hint: kbd("F", { mod: true }),              action: () => editorRef.current?.find() },
-              ...(canOptimize   ? [{ icon: <Network  className="h-3.5 w-3.5" />, label: "Explain query plan", hint: kbd("E", { mod: true, shift: true }), action: () => { const q = editorRef.current?.getQuery() ?? ""; if (q) handleExplain(q); } }] : []),
+              { icon: <Network  className="h-3.5 w-3.5" />, label: "Explain query plan", hint: kbd("E", { mod: true, shift: true }), action: () => { const q = editorRef.current?.getQuery() ?? ""; if (q) handleExplain(q); } },
               ...(canOptimize   ? [{ icon: <Sparkles className="h-3.5 w-3.5" />, label: "AI optimize",        hint: kbd("I", { mod: true, shift: true }), action: () => { const q = editorRef.current?.getQuery() ?? ""; if (q) handleOptimize(q); } }] : []),
               ...((canSaveQuery || canUpdateQuery) ? [{ icon: <Save className="h-3.5 w-3.5" />, label: "Save",     hint: kbd("S", { mod: true }),              action: () => editorRef.current?.save() }] : []),
               ...(canSaveQuery                     ? [{ icon: <Copy className="h-3.5 w-3.5" />, label: "Save as…", hint: kbd("S", { mod: true, shift: true }), action: () => editorRef.current?.saveAs() }] : []),
