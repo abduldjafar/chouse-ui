@@ -766,23 +766,23 @@ const DatabaseExplorer: React.FC = () => {
               className="p-2"
             >
               {/* Connection Filter for Saved Queries */}
-              <div className="flex items-center gap-2 mb-3 px-1">
-                <Filter className="w-3 h-3 text-gray-500" />
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <Filter className="h-3 w-3 text-paper-faint" aria-hidden />
                 <Select value={connectionFilter} onValueChange={setConnectionFilter}>
-                  <SelectTrigger className="h-7 text-xs bg-white/5 border-white/10 flex-1">
-                    <SelectValue placeholder="All Connections" />
+                  <SelectTrigger className="h-7 flex-1 rounded-xs border-ink-500 bg-ink-200 font-mono text-[11px] text-paper">
+                    <SelectValue placeholder="All connections" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xs border-ink-500 bg-ink-100 text-paper">
                     <SelectItem value="all">
                       <span className="flex items-center gap-2">
-                        <Layers className="w-3.5 h-3.5 text-purple-400" />
-                        All Connections
+                        <Layers className="h-3.5 w-3.5 text-paper-dim" aria-hidden />
+                        All connections
                       </span>
                     </SelectItem>
                     {activeConnectionId && (
                       <SelectItem value="current">
                         <span className="flex items-center gap-2">
-                          <Pin className="w-3.5 h-3.5 text-emerald-400" />
+                          <Pin className="h-3.5 w-3.5 text-brand" aria-hidden />
                           {activeConnectionName || "Current"}
                         </span>
                       </SelectItem>
@@ -792,7 +792,7 @@ const DatabaseExplorer: React.FC = () => {
                       .map((name) => (
                         <SelectItem key={name} value={name}>
                           <span className="flex items-center gap-2">
-                            <Database className="w-3.5 h-3.5 text-blue-400" />
+                            <Database className="h-3.5 w-3.5 text-paper-dim" aria-hidden />
                             {name}
                           </span>
                         </SelectItem>
@@ -804,9 +804,9 @@ const DatabaseExplorer: React.FC = () => {
                     size="sm"
                     variant="ghost"
                     onClick={() => setConnectionFilter("all")}
-                    className="h-7 w-7 p-0 text-gray-400 hover:text-white"
+                    className="h-7 w-7 rounded-xs p-0 text-paper-dim hover:bg-ink-200 hover:text-paper"
                   >
-                    <X className="w-3.5 h-3.5" />
+                    <X className="h-3.5 w-3.5" />
                   </Button>
                 )}
               </div>
