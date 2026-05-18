@@ -1414,30 +1414,27 @@ export default function AiChatBubble() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            width: 48,
-                            height: 120,
+                            width: 40,
+                            height: 110,
                         }}
                     >
                         <button
+                            type="button"
                             onClick={() => setIsOpen(true)}
-                            aria-label="Open AI Chat"
-                            className="flex items-center justify-center
-                                       transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] transform-gpu
-                                       w-10 h-24 rounded-l-xl
-                                       shadow-xl shadow-violet-500/10 cursor-pointer
-                                       bg-black/60 backdrop-blur-xl hover:bg-black/80
-                                       border-y border-l border-white/10 hover:border-violet-500/30
-                                       opacity-70 hover:opacity-100 hover:-translate-x-1
-                                       group"
-                            title="Open AI Chat"
+                            aria-label="Open AI chat"
+                            className="group flex items-center justify-center
+                                       w-9 h-24 rounded-l-md cursor-pointer
+                                       bg-ink-100 border-y border-l border-ink-500
+                                       text-paper-dim
+                                       transition-[border-color,background-color,color,transform] duration-200
+                                       hover:bg-ink-200 hover:border-brand hover:text-brand
+                                       hover:-translate-x-px"
+                            title="Open AI chat"
                         >
                             <div className="flex flex-col items-center gap-1.5 py-3">
-                                <div className="relative">
-                                    <Sparkles className="w-4 h-4 text-violet-400 group-hover:text-violet-300 transition-colors" />
-                                    <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
-                                </div>
+                                <Sparkles className="w-3.5 h-3.5" aria-hidden />
                                 <span
-                                    className="text-xs font-semibold text-zinc-300 group-hover:text-white tracking-wide transition-colors"
+                                    className="font-mono text-[10px] uppercase tracking-[0.18em]"
                                     style={{ writingMode: 'vertical-lr' }}
                                 >
                                     Ask AI
@@ -1481,8 +1478,8 @@ export default function AiChatBubble() {
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.2 }}
                         style={{ touchAction: 'none' }}
-                        className={`pointer-events-auto flex flex-col overflow-hidden bg-black/70 backdrop-blur-2xl border-white/10 shadow-black/60 shadow-2xl w-full h-full
-                                    ${isMobile ? 'border-0 rounded-none animate-[slideUpFull_0.3s_ease-out]' : 'border rounded-2xl'}`}
+                        className={`pointer-events-auto flex flex-col overflow-hidden bg-ink-100 border-ink-500 shadow-2xl shadow-black/40 w-full h-full
+                                    ${isMobile ? 'border-0 rounded-none animate-[slideUpFull_0.3s_ease-out]' : 'border rounded-md'}`}
                     >
                         {/* Main content wrapper */}
                         <div className="flex flex-col flex-1 relative w-full h-full">
@@ -1526,15 +1523,11 @@ export default function AiChatBubble() {
                                 <div className="fixed inset-0 z-[100] cursor-grabbing" style={{ left: '-100vw', right: '-100vw', top: '-100vh', bottom: '-100vh' }} />
                             )}
 
-                            {/* Glow orbs behind window */}
-                            <div className="absolute -top-32 -right-32 w-64 h-64 bg-violet-500/15 rounded-full blur-3xl pointer-events-none" />
-                            <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
                             {/* Header — never shrinks; full header is draggable */}
                             <div
-                                className={`relative z-10 flex-shrink-0 flex items-center justify-between px-5 py-3
-                                      bg-white/[0.03] backdrop-blur-sm
-                                      border-b border-white/[0.06]
+                                className={`relative z-10 flex-shrink-0 flex items-center justify-between px-4 py-2.5
+                                      bg-ink-200
+                                      border-b border-ink-500
                                       ${!isResizing ? 'cursor-grab active:cursor-grabbing' : ''}`}
                                 style={!isResizing ? { touchAction: 'none' } : undefined}
                                 aria-label="Drag to move"
@@ -1552,22 +1545,24 @@ export default function AiChatBubble() {
                             >
                                 <div className="flex items-center gap-3">
                                     <button
+                                        type="button"
                                         onClick={() => setShowSidebar(!showSidebar)}
-                                        className="p-1.5 rounded-lg hover:bg-white/[0.08] transition-colors text-zinc-500 hover:text-zinc-200"
+                                        className="grid h-7 w-7 place-items-center rounded-xs text-paper-dim transition-colors hover:bg-ink-300 hover:text-paper"
                                         title={showSidebar ? 'Close sidebar' : 'Thread history'}
+                                        aria-label={showSidebar ? 'Close sidebar' : 'Thread history'}
                                     >
-                                        {showSidebar ? <PanelLeftClose className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
+                                        {showSidebar ? <PanelLeftClose className="h-3.5 w-3.5" /> : <MessageSquare className="h-3.5 w-3.5" />}
                                     </button>
                                     <div className="flex items-center gap-2.5">
                                         <div className="relative">
-                                            <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500/20 to-indigo-500/20">
-                                                <Bot className="w-4 h-4 text-violet-400" />
-                                            </div>
-                                            <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-black/70 animate-pulse" />
+                                            <span className="grid h-7 w-7 place-items-center rounded-xs border border-ink-500 bg-ink-100 text-paper-muted">
+                                                <Bot className="h-3.5 w-3.5" aria-hidden />
+                                            </span>
+                                            <span className="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-emerald-400 ring-2 ring-ink-200" aria-hidden />
                                         </div>
-                                        <div>
-                                            <span className="text-sm font-semibold text-zinc-100">CHouse AI</span>
-                                            <span className="text-[10px] text-emerald-400/60 ml-2 font-medium">Online</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[13px] font-semibold text-paper">CHouse AI</span>
+                                            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Online</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1577,40 +1572,40 @@ export default function AiChatBubble() {
                                         <div className="mr-2 hidden sm:block">
                                             <DropdownMenu>
                                                 <DropdownMenuTrigger asChild>
-                                                    <button className="flex items-center gap-2 bg-black/40 text-xs text-zinc-300 border border-white/10 rounded-lg px-2.5 py-1.5 hover:bg-white/5 hover:border-white/20 transition-colors max-w-[160px]">
-                                                        <span className="truncate">{aiModels.find(m => m.id === selectedModelId)?.name || 'Select Model'}</span>
-                                                        <ChevronDown className="w-3 h-3 opacity-50 flex-shrink-0" />
+                                                    <button type="button" className="inline-flex items-center gap-2 rounded-xs border border-ink-500 bg-ink-100 px-2 py-1 font-mono text-[11px] text-paper hover:border-ink-700 hover:bg-ink-300 transition-colors max-w-[180px]">
+                                                        <span className="truncate">{aiModels.find(m => m.id === selectedModelId)?.name || 'Select model'}</span>
+                                                        <ChevronDown className="h-3 w-3 text-paper-dim shrink-0" aria-hidden />
                                                     </button>
                                                 </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" className="w-[240px] bg-[#1a1c24] border-white/10 p-2 shadow-2xl">
-                                                    <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider px-2 py-1.5 flex flex-col mb-1">
+                                                <DropdownMenuContent align="end" className="w-[240px] rounded-md border-ink-500 bg-ink-100 p-0">
+                                                    <div className="border-b border-ink-500 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
                                                         AI Models
                                                     </div>
-                                                    <div className="flex flex-col gap-1 max-h-[280px] overflow-y-auto custom-scrollbar">
-                                                        {aiModels.map(m => (
-                                                            <DropdownMenuItem
-                                                                key={m.id}
-                                                                onClick={() => setSelectedModelId(m.id)}
-                                                                className={`flex items-start gap-2.5 px-3 py-2 cursor-pointer rounded-lg transition-colors ${selectedModelId === m.id
-                                                                    ? "bg-violet-500/15 text-violet-200"
-                                                                    : "hover:bg-white/5 text-zinc-300"
-                                                                    }`}
-                                                            >
-                                                                <div className="mt-0.5 flex-shrink-0">
-                                                                    <div className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center ${selectedModelId === m.id ? "border-violet-400" : "border-zinc-600"}`}>
-                                                                        {selectedModelId === m.id && <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />}
+                                                    <div className="flex max-h-[280px] flex-col gap-0.5 overflow-y-auto p-1">
+                                                        {aiModels.map(m => {
+                                                            const isCurrent = selectedModelId === m.id;
+                                                            return (
+                                                                <DropdownMenuItem
+                                                                    key={m.id}
+                                                                    onClick={() => setSelectedModelId(m.id)}
+                                                                    className={`flex items-start gap-2.5 rounded-xs px-3 py-2 cursor-pointer transition-colors hover:bg-ink-200 ${isCurrent ? "bg-ink-200" : ""}`}
+                                                                >
+                                                                    <div className="mt-0.5 flex-shrink-0">
+                                                                        <div className={`grid h-3.5 w-3.5 place-items-center rounded-full border ${isCurrent ? "border-brand" : "border-ink-700"}`}>
+                                                                            {isCurrent && <div className="h-1.5 w-1.5 rounded-full bg-brand" />}
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                                <div className="flex flex-col gap-0.5 min-w-0">
-                                                                    <span className={`text-[13px] font-medium truncate ${selectedModelId === m.id ? "text-violet-200" : "text-zinc-200"}`}>
-                                                                        {m.name}
-                                                                    </span>
-                                                                    <span className="text-[10px] text-zinc-500 uppercase font-medium tracking-wide truncate">
-                                                                        {m.provider || 'AI Provider'}
-                                                                    </span>
-                                                                </div>
-                                                            </DropdownMenuItem>
-                                                        ))}
+                                                                    <div className="flex min-w-0 flex-col gap-0.5">
+                                                                        <span className={`truncate text-[13px] font-medium ${isCurrent ? "text-paper" : "text-paper-muted"}`}>
+                                                                            {m.name}
+                                                                        </span>
+                                                                        <span className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
+                                                                            {m.provider || 'AI provider'}
+                                                                        </span>
+                                                                    </div>
+                                                                </DropdownMenuItem>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
@@ -1625,7 +1620,7 @@ export default function AiChatBubble() {
                                                 setWindowSize(newSize);
                                                 saveChatPrefsDebounced(position, newSize);
                                             }}
-                                            className="p-2 rounded-lg hover:bg-white/[0.08] transition-colors text-zinc-500 hover:text-zinc-200 mr-1"
+                                            className="grid h-7 w-7 place-items-center rounded-xs text-paper-dim transition-colors hover:bg-ink-300 hover:text-paper mr-1"
                                             title={windowSize.width >= DEFAULT_DESKTOP_WIDTH * 0.9 ? "Compact mode" : "Default size"}
                                         >
                                             {windowSize.width >= DEFAULT_DESKTOP_WIDTH * 0.9 ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -1634,7 +1629,7 @@ export default function AiChatBubble() {
                                     <button
                                         onClick={handleExportThread}
                                         disabled={!activeThreadId || messages.length === 0}
-                                        className="p-2 rounded-lg hover:bg-white/[0.08] transition-colors text-zinc-500 hover:text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="grid h-7 w-7 place-items-center rounded-xs text-paper-dim transition-colors hover:bg-ink-300 hover:text-paper disabled:opacity-40 disabled:cursor-not-allowed"
                                         title="Export thread"
                                         aria-label="Export thread"
                                     >
@@ -1642,14 +1637,14 @@ export default function AiChatBubble() {
                                     </button>
                                     <button
                                         onClick={handleNewThread}
-                                        className="p-2 rounded-lg hover:bg-white/[0.08] transition-colors text-zinc-500 hover:text-zinc-200"
+                                        className="grid h-7 w-7 place-items-center rounded-xs text-paper-dim transition-colors hover:bg-ink-300 hover:text-paper"
                                         title="New chat"
                                     >
                                         <Plus className="w-4 h-4" />
                                     </button>
                                     <button
                                         onClick={() => setIsOpen(false)}
-                                        className="p-2 rounded-lg hover:bg-white/[0.08] transition-colors text-zinc-500 hover:text-zinc-200"
+                                        className="grid h-7 w-7 place-items-center rounded-xs text-paper-dim transition-colors hover:bg-ink-300 hover:text-paper"
                                         title="Close (Esc)"
                                     >
                                         <X className="w-4 h-4" />
@@ -1660,13 +1655,13 @@ export default function AiChatBubble() {
                             <div className="relative z-10 flex flex-1 min-h-0 overflow-hidden">
                                 {/* Thread Sidebar — on mobile it acts as an overlay/slideover. Auto-hide on small desktop logical widths. */}
                                 {showSidebar && !shouldHideSidebar && (
-                                    <div className={`flex-shrink-0 bg-black/80 backdrop-blur-xl border-r border-white/[0.06] overflow-y-auto z-20 transition-all ${isMobile ? 'absolute inset-0 w-full' : 'absolute left-0 top-0 bottom-0 w-72 md:relative md:w-72'}`}>
+                                    <div className={`flex-shrink-0 bg-ink-100 border-r border-ink-500 overflow-y-auto z-20 transition-all ${isMobile ? 'absolute inset-0 w-full' : 'absolute left-0 top-0 bottom-0 w-72 md:relative md:w-72'}`}>
                                         <div className="p-3">
-                                            <div className="flex items-center justify-between mb-3 px-1">
-                                                <h3 className="text-[13px] font-semibold text-zinc-500 uppercase tracking-wider">
+                                            <div className="mb-3 flex items-center justify-between px-1">
+                                                <h3 className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
                                                     Conversations
                                                 </h3>
-                                                <span className="text-[11px] text-zinc-600">{threads.length}</span>
+                                                <span className="font-mono text-[10px] text-paper-faint">{threads.length}</span>
                                             </div>
                                             {isLoadingThreads ? (
                                                 <div className="flex items-center justify-center py-8">
@@ -1727,86 +1722,75 @@ export default function AiChatBubble() {
                                     <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
                                         {!activeThreadId ? (
                                             /* Welcome screen */
-                                            <div className="flex flex-col items-center justify-center h-full text-center px-8">
-                                                <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20
-                                                  flex items-center justify-center mb-6 ring-1 ring-white/10">
-                                                    <Sparkles className="w-9 h-9 text-violet-400" />
-                                                    <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 ring-2 ring-black/50 animate-pulse" />
+                                            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                                                <div className="relative mb-6 grid h-14 w-14 place-items-center rounded-md border border-ink-500 bg-ink-200">
+                                                    <Sparkles className="h-6 w-6 text-paper-muted" aria-hidden />
+                                                    <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-ink-100" aria-hidden />
                                                 </div>
-                                                <h3 className="text-2xl font-bold bg-gradient-to-r from-violet-300 via-indigo-300 to-violet-400 bg-clip-text text-transparent mb-2">
+                                                <span className="mb-2 inline-flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.18em] text-paper-dim">
+                                                    <span className="h-px w-6 bg-ink-700" aria-hidden />
                                                     CHouse AI
+                                                </span>
+                                                <h3 className="mb-2 text-xl font-semibold tracking-tight text-paper">
+                                                    Ask anything about{" "}
+                                                    <span className="text-paper-dim">your ClickHouse data.</span>
                                                 </h3>
-                                                <p className="text-sm text-zinc-500 mb-8 leading-relaxed max-w-md">
-                                                    Your intelligent ClickHouse assistant. Explore schemas, write queries,
-                                                    analyze performance, and get instant insights from your data.
+                                                <p className="mb-8 max-w-md text-[13px] leading-relaxed text-paper-muted">
+                                                    Explore schemas, write queries, analyze performance, and get insights — straight from the editor.
                                                 </p>
-                                                {/* Suggested prompts — random subset with shuffle */}
-                                                <div className="w-full max-w-lg mb-6">
-                                                    <div className={`grid gap-3 ${useSingleColPrompt ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                                                {/* Suggested prompts */}
+                                                <div className="mb-6 w-full max-w-lg">
+                                                    <div className={`grid gap-2 ${useSingleColPrompt ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                                         {visiblePrompts.map((sp) => (
                                                             <button
                                                                 key={sp.label}
+                                                                type="button"
                                                                 onClick={async () => { if (!activeThreadId) { await handleNewThread(); } setInput(sp.prompt); setTimeout(() => inputRef.current?.focus(), 100); }}
-                                                                className="flex items-center gap-3 px-4 py-3.5 rounded-xl
-                                                             bg-white/[0.04] border border-white/[0.07]
-                                                             hover:bg-violet-500/10 hover:border-violet-500/20
-                                                             hover:shadow-lg hover:shadow-violet-500/5
-                                                             text-left transition-all duration-300 group"
+                                                                className="group flex items-center gap-3 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5 text-left transition-colors hover:border-ink-700 hover:bg-ink-300"
                                                             >
-                                                                <div className="p-1.5 rounded-lg bg-violet-500/10 group-hover:bg-violet-500/20 transition-colors">
-                                                                    <sp.icon className="w-3.5 h-3.5 text-violet-400/70 group-hover:text-violet-300 transition-colors" />
-                                                                </div>
-                                                                <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors">{sp.label}</span>
+                                                                <sp.icon className="h-3.5 w-3.5 shrink-0 text-paper-dim transition-colors group-hover:text-brand" aria-hidden />
+                                                                <span className="text-[12px] text-paper-muted transition-colors group-hover:text-paper">{sp.label}</span>
                                                             </button>
                                                         ))}
                                                     </div>
                                                     <button
+                                                        type="button"
                                                         onClick={() => setShuffleKey(Date.now())}
-                                                        className="flex items-center gap-1.5 mx-auto mt-3 px-3 py-1.5 rounded-lg
-                                                     text-[11px] text-zinc-600 hover:text-zinc-300
-                                                     hover:bg-white/[0.04] transition-all duration-200"
+                                                        className="mx-auto mt-3 flex items-center gap-1.5 rounded-xs px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint transition-colors hover:bg-ink-200 hover:text-paper"
                                                         title="Show different suggestions"
                                                     >
-                                                        <Shuffle className="w-3 h-3" />
+                                                        <Shuffle className="h-3 w-3" />
                                                         More suggestions
                                                     </button>
                                                 </div>
                                                 <button
+                                                    type="button"
                                                     onClick={handleNewThread}
-                                                    className="px-6 py-2.5 rounded-xl
-                                                 bg-gradient-to-r from-violet-500 to-indigo-600
-                                                 hover:from-violet-400 hover:to-indigo-500
-                                                 text-white text-sm font-medium transition-all duration-300
-                                                 flex items-center gap-2
-                                                 shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40"
+                                                    className="inline-flex h-10 items-center gap-2 rounded-xs bg-brand px-4 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-50 transition-[transform,background-color] duration-200 hover:bg-brand-soft hover:-translate-y-px"
                                                 >
-                                                    <Plus className="w-4 h-4" />
-                                                    Start New Chat
+                                                    <Plus className="h-4 w-4" />
+                                                    Start new chat
                                                 </button>
                                             </div>
                                         ) : messages.length === 0 ? (
                                             /* Thread selected but empty */
-                                            <div className="flex flex-col items-center justify-center h-full text-center px-8">
-                                                <div className="p-3 rounded-2xl bg-gradient-to-br from-violet-500/15 to-indigo-500/15 ring-1 ring-white/[0.06] mb-4">
-                                                    <Bot className="w-8 h-8 text-violet-400/60" />
+                                            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+                                                <div className="mb-4 grid h-12 w-12 place-items-center rounded-md border border-ink-500 bg-ink-200">
+                                                    <Bot className="h-5 w-5 text-paper-muted" aria-hidden />
                                                 </div>
-                                                <p className="text-sm text-zinc-500 mb-6">
-                                                    Ask me anything about your ClickHouse databases
+                                                <p className="mb-6 text-[13px] text-paper-muted">
+                                                    Ask me anything about your ClickHouse databases.
                                                 </p>
                                                 <div className="w-full max-w-md">
                                                     <div className={`grid gap-2 ${useSingleColPrompt ? 'grid-cols-1' : 'grid-cols-2'}`}>
                                                         {visiblePrompts.map((sp) => (
                                                             <button
                                                                 key={sp.label}
+                                                                type="button"
                                                                 onClick={async () => { if (!activeThreadId) { await handleNewThread(); } setInput(sp.prompt); setTimeout(() => inputRef.current?.focus(), 100); }}
-                                                                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl
-                                                             bg-white/[0.04] border border-white/[0.07]
-                                                             hover:bg-violet-500/10 hover:border-violet-500/20
-                                                             text-left transition-all duration-300 group"
+                                                                className="group flex items-center gap-2.5 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5 text-left transition-colors hover:border-ink-700 hover:bg-ink-300"
                                                             >
-                                                                <div className="p-1 rounded-md bg-violet-500/10 group-hover:bg-violet-500/20 transition-colors">
-                                                                    <sp.icon className="w-3 h-3 text-violet-400/60 group-hover:text-violet-300 transition-colors" />
-                                                                </div>
+                                                                <sp.icon className="h-3 w-3 shrink-0 text-paper-dim transition-colors group-hover:text-brand" aria-hidden />
                                                                 <span className="text-xs text-zinc-500 group-hover:text-zinc-200 transition-colors">{sp.label}</span>
                                                             </button>
                                                         ))}
