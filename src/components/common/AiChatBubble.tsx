@@ -263,11 +263,11 @@ function SidebarThreadButton({
                     onLoad(thread.id);
                 }
             }}
-            className={`w-full text-left px-3 py-2.5 rounded-xl text-[14px]
-                      flex items-center justify-between group transition-all duration-200 cursor-pointer
+            className={`w-full text-left px-3 py-2 rounded-xs text-[13px]
+                      flex items-center justify-between group transition-colors duration-200 cursor-pointer border
                       ${activeId === thread.id
-                    ? 'bg-violet-500/10 text-zinc-100 border-l-2 border-l-violet-400 border border-violet-500/10'
-                    : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200 border border-transparent'
+                    ? 'border-ink-500 bg-ink-200 text-paper border-l-brand border-l-2'
+                    : 'border-transparent text-paper-muted hover:bg-ink-200 hover:text-paper'
                 }`}
         >
             <div className="flex-1 min-w-0 mr-2">
@@ -279,7 +279,7 @@ function SidebarThreadButton({
                         onBlur={handleSave}
                         onKeyDown={(e) => e.key === 'Escape' && onCancelEdit()}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full bg-white/10 border border-white/20 rounded px-2 py-1 text-sm text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-400"
+                        className="w-full rounded-xs border border-ink-500 bg-ink-100 px-2 py-1 text-[13px] text-paper focus:border-brand focus:outline-none focus:ring-0"
                         placeholder="Thread title"
                         autoFocus
                         aria-label="Edit thread title"
@@ -287,7 +287,7 @@ function SidebarThreadButton({
                 ) : (
                     <>
                         <span className="block truncate">{thread.title || 'New Thread'}</span>
-                        <span className="flex items-center gap-1 text-xs text-zinc-600 mt-0.5">
+                        <span className="flex items-center gap-1 mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
                             <Clock className="w-2.5 h-2.5" />
                             {timeAgo(thread.updatedAt)}
                         </span>
@@ -302,7 +302,7 @@ function SidebarThreadButton({
                             onStartEdit(thread.id, e);
                             setEditValue(thread.title || '');
                         }}
-                        className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-white/10 text-zinc-500 hover:text-zinc-300 transition-all"
+                        className="p-1 rounded-xs opacity-0 group-hover:opacity-100 hover:bg-ink-300 text-paper-dim hover:text-paper transition-colors"
                         title="Rename"
                         aria-label="Rename thread"
                     >
@@ -313,8 +313,8 @@ function SidebarThreadButton({
                             e.stopPropagation();
                             onDelete(thread.id, e);
                         }}
-                        className="p-1 rounded-lg opacity-0 group-hover:opacity-100
-                                 hover:bg-red-500/15 text-zinc-600 hover:text-red-400 transition-all"
+                        className="p-1 rounded-xs opacity-0 group-hover:opacity-100
+                                 hover:bg-red-950/40 text-paper-dim hover:text-red-300 transition-colors"
                         title="Delete chat"
                     >
                         <Trash2 className="w-3 h-3" />
@@ -357,17 +357,17 @@ function CollapsibleThreadGroup({
         <div className="mb-4 last:mb-0">
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="sticky top-0 z-10 border-b border-white/[0.06] flex items-center gap-1.5 w-[calc(100%+24px)] -mx-3 px-4 text-xs font-semibold uppercase tracking-wider bg-black/95 backdrop-blur-2xl py-2.5 mb-2 transition-colors text-violet-300/80 hover:text-violet-200"
+                className="sticky top-0 z-10 border-b border-ink-500 flex items-center gap-1.5 w-[calc(100%+24px)] -mx-3 px-4 font-mono text-[10px] uppercase tracking-[0.18em] bg-ink-100 py-2.5 mb-2 transition-colors text-paper-dim hover:text-paper"
             >
-                <div className="flex items-center justify-center p-0.5 rounded transition-colors hover:bg-white/10">
+                <div className="flex items-center justify-center p-0.5 rounded-xs transition-colors hover:bg-ink-200">
                     {isExpanded ? (
-                        <ChevronDown className="w-3 h-3 text-zinc-400" />
+                        <ChevronDown className="w-3 h-3 text-paper-dim" />
                     ) : (
-                        <ChevronRight className="w-3 h-3 text-zinc-400" />
+                        <ChevronRight className="w-3 h-3 text-paper-dim" />
                     )}
                 </div>
                 {title}
-                <span className="ml-auto text-zinc-600 font-normal normal-case">{threads.length}</span>
+                <span className="ml-auto font-mono text-[10px] text-paper-faint normal-case">{threads.length}</span>
             </button>
 
             <div
@@ -411,37 +411,37 @@ function ThinkingPanel({ toolCalls, isStreaming }: { toolCalls: ToolCallStep[]; 
         : `Used ${toolCalls.length} tool${toolCalls.length !== 1 ? 's' : ''}`;
 
     return (
-        <div className="mb-3 rounded-xl border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm overflow-hidden">
-            {/* Animated shimmer bar while running */}
+        <div className="mb-3 rounded-xs border border-ink-500 bg-ink-200 overflow-hidden">
+            {/* Subtle pulse bar while running */}
             {isRunning && (
-                <div className="h-0.5 w-full bg-gradient-to-r from-violet-500/0 via-violet-400/60 to-violet-500/0 animate-pulse" />
+                <div className="h-px w-full bg-brand/50 animate-pulse" />
             )}
             <button
                 onClick={() => setExpanded((v) => !v)}
-                className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-white/[0.04] transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-ink-300"
             >
                 {isRunning
-                    ? <Loader2 className="w-3.5 h-3.5 text-violet-400 animate-spin flex-shrink-0" />
-                    : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400/70 flex-shrink-0" />
+                    ? <Loader2 className="w-3.5 h-3.5 text-brand animate-spin flex-shrink-0" />
+                    : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400/80 flex-shrink-0" />
                 }
-                <span className="text-[11px] text-zinc-400 font-medium flex-1">{label}</span>
+                <span className="flex-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-muted">{label}</span>
                 <ChevronDown
-                    className={`w-3.5 h-3.5 text-zinc-500 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+                    className={`w-3.5 h-3.5 text-paper-dim transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
                 />
             </button>
 
             {expanded && (
-                <div className="px-3.5 pb-3 space-y-2.5 border-t border-white/[0.06]">
+                <div className="px-3 pb-3 space-y-2.5 border-t border-ink-500">
                     {toolCalls.map((step, i) => (
                         <div key={i} className="pt-2.5 flex gap-2.5">
                             <div className="flex-shrink-0 pt-0.5">
                                 {step.status === 'running'
-                                    ? <Loader2 className="w-3 h-3 text-violet-400 animate-spin" />
-                                    : <CheckCircle2 className="w-3 h-3 text-emerald-400/70" />
+                                    ? <Loader2 className="w-3 h-3 text-brand animate-spin" />
+                                    : <CheckCircle2 className="w-3 h-3 text-emerald-400/80" />
                                 }
                             </div>
                             <div className="flex-1 min-w-0 space-y-1">
-                                <span className="text-[11px] font-semibold text-zinc-300">{formatToolName(step.tool)}</span>
+                                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper">{formatToolName(step.tool)}</span>
                                 {Object.entries(step.args)
                                     .filter(([, v]) => v !== undefined && v !== null && v !== '')
                                     .map(([k, v]) => {
@@ -451,18 +451,18 @@ function ThinkingPanel({ toolCalls, isStreaming }: { toolCalls: ToolCallStep[]; 
                                         const isMultiLine = strVal.includes('\n') || strVal.length > 80;
                                         return (
                                             <div key={k} className={`text-[10px] ${isMultiLine ? '' : 'flex items-baseline gap-1.5'}`}>
-                                                <span className="text-zinc-500 font-medium shrink-0">{k}:</span>
+                                                <span className="font-mono uppercase tracking-[0.14em] text-paper-faint shrink-0">{k}:</span>
                                                 {isMultiLine ? (
-                                                    <pre className="mt-0.5 bg-black/40 rounded-lg px-2.5 py-1.5 text-zinc-400 font-mono whitespace-pre-wrap break-all overflow-x-auto max-h-[120px] overflow-y-auto border border-white/[0.04]">{strVal.trim()}</pre>
+                                                    <pre className="mt-0.5 rounded-xs border border-ink-500 bg-ink-100 px-2.5 py-1.5 text-paper-muted font-mono whitespace-pre-wrap break-all overflow-x-auto max-h-[120px] overflow-y-auto">{strVal.trim()}</pre>
                                                 ) : (
-                                                    <span className="text-zinc-400 font-mono ml-1.5">{strVal}</span>
+                                                    <span className="text-paper-muted font-mono ml-1.5">{strVal}</span>
                                                 )}
                                             </div>
                                         );
                                     })
                                 }
                                 {step.status === 'done' && step.summary && (
-                                    <p className="text-[10px] text-emerald-400/70">↳ {step.summary}</p>
+                                    <p className="text-[10px] text-emerald-400/80">↳ {step.summary}</p>
                                 )}
                             </div>
                         </div>
@@ -478,18 +478,18 @@ type CodeComponentProps = React.ComponentPropsWithoutRef<'code'> & { className?:
 
 const markdownComponents = {
     table: ({ children, ...props }: React.ComponentPropsWithoutRef<'table'>) => (
-        <div className="overflow-x-auto my-2 rounded-lg border border-white/10">
-            <table className="min-w-full text-xs" {...props}>{children}</table>
+        <div className="overflow-x-auto my-2 rounded-xs border border-ink-500">
+            <table className="min-w-full text-[12px]" {...props}>{children}</table>
         </div>
     ),
     thead: ({ children, ...props }: React.ComponentPropsWithoutRef<'thead'>) => (
-        <thead className="bg-white/5" {...props}>{children}</thead>
+        <thead className="bg-ink-200" {...props}>{children}</thead>
     ),
     th: ({ children, ...props }: React.ComponentPropsWithoutRef<'th'>) => (
-        <th className="px-3 py-1.5 text-left font-medium text-white/80 border-b border-white/10 whitespace-nowrap" {...props}>{children}</th>
+        <th className="px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim border-b border-ink-500 whitespace-nowrap" {...props}>{children}</th>
     ),
     td: ({ children, ...props }: React.ComponentPropsWithoutRef<'td'>) => (
-        <td className="px-3 py-1.5 text-white/70 border-b border-white/5 whitespace-nowrap" {...props}>{children}</td>
+        <td className="px-3 py-1.5 text-paper-muted border-b border-ink-500 whitespace-nowrap" {...props}>{children}</td>
     ),
     code: ({ className, children, ...props }: CodeComponentProps) => {
         const match = /language-(\w+)/.exec(className || '');
@@ -508,14 +508,14 @@ const markdownComponents = {
                     <button
                         type="button"
                         onClick={() => copyToClipboard(codeStr, 'Code')}
-                        className="absolute top-2 right-2 p-1.5 rounded opacity-0 group-hover/code:opacity-100 hover:bg-white/10 text-zinc-500 hover:text-zinc-300 transition-all"
+                        className="absolute top-2 right-2 p-1.5 rounded-xs opacity-0 group-hover/code:opacity-100 hover:bg-ink-300 text-paper-dim hover:text-paper transition-colors"
                         title="Copy code"
                         aria-label="Copy code"
                     >
                         <Copy className="w-3 h-3" />
                     </button>
                     <code
-                        className={`${className || ''} text-xs block pr-8`}
+                        className={`${className || ''} text-[12px] block pr-8`}
                         dangerouslySetInnerHTML={{ __html: sanitized }}
                         {...props}
                     />
@@ -523,28 +523,28 @@ const markdownComponents = {
             );
         }
         // Inline code
-        return <code className="bg-white/10 px-1.5 py-0.5 rounded text-violet-300 text-xs" {...props}>{children}</code>;
+        return <code className="rounded-xs border border-ink-500 bg-ink-200 px-1 font-mono text-[11px] text-paper" {...props}>{children}</code>;
     },
     pre: ({ children, ...props }: React.ComponentPropsWithoutRef<'pre'>) => (
-        <pre className="bg-black/40 rounded-lg p-3 overflow-x-auto my-2 text-xs" {...props}>{children}</pre>
+        <pre className="rounded-xs border border-ink-500 bg-ink-200 p-3 overflow-x-auto my-2 font-mono text-[12px] text-paper" {...props}>{children}</pre>
     ),
     p: ({ children, ...props }: React.ComponentPropsWithoutRef<'p'>) => (
-        <p className="my-1.5 leading-relaxed" {...props}>{children}</p>
+        <p className="my-1.5 leading-relaxed text-paper-muted" {...props}>{children}</p>
     ),
     ul: ({ children, ...props }: React.ComponentPropsWithoutRef<'ul'>) => (
-        <ul className="list-disc list-inside my-1.5 space-y-0.5" {...props}>{children}</ul>
+        <ul className="list-disc list-outside ml-5 my-1.5 space-y-0.5 text-paper-muted marker:text-brand" {...props}>{children}</ul>
     ),
     ol: ({ children, ...props }: React.ComponentPropsWithoutRef<'ol'>) => (
-        <ol className="list-decimal list-inside my-1.5 space-y-0.5" {...props}>{children}</ol>
+        <ol className="list-decimal list-outside ml-5 my-1.5 space-y-0.5 text-paper-muted marker:text-brand" {...props}>{children}</ol>
     ),
-    h1: ({ children, ...props }: React.ComponentPropsWithoutRef<'h1'>) => <h1 className="text-base font-bold text-white/90 mt-3 mb-1" {...props}>{children}</h1>,
-    h2: ({ children, ...props }: React.ComponentPropsWithoutRef<'h2'>) => <h2 className="text-sm font-bold text-white/90 mt-3 mb-1" {...props}>{children}</h2>,
-    h3: ({ children, ...props }: React.ComponentPropsWithoutRef<'h3'>) => <h3 className="text-sm font-semibold text-white/90 mt-2 mb-1" {...props}>{children}</h3>,
+    h1: ({ children, ...props }: React.ComponentPropsWithoutRef<'h1'>) => <h1 className="text-[18px] font-semibold tracking-tight text-paper mt-3 mb-1" {...props}>{children}</h1>,
+    h2: ({ children, ...props }: React.ComponentPropsWithoutRef<'h2'>) => <h2 className="text-[16px] font-semibold tracking-tight text-paper mt-3 mb-1" {...props}>{children}</h2>,
+    h3: ({ children, ...props }: React.ComponentPropsWithoutRef<'h3'>) => <h3 className="text-[14px] font-semibold tracking-tight text-paper mt-2 mb-1" {...props}>{children}</h3>,
     a: ({ children, ...props }: React.ComponentPropsWithoutRef<'a'>) => (
-        <a className="text-violet-400 hover:text-violet-300 underline" target="_blank" rel="noopener" {...props}>{children}</a>
+        <a className="text-brand underline hover:text-brand-soft" target="_blank" rel="noopener" {...props}>{children}</a>
     ),
     blockquote: ({ children, ...props }: React.ComponentPropsWithoutRef<'blockquote'>) => (
-        <blockquote className="border-l-2 border-violet-500/40 pl-3 my-2 text-white/60 italic" {...props}>{children}</blockquote>
+        <blockquote className="border-l-2 border-brand pl-3 my-2 text-paper-muted italic" {...props}>{children}</blockquote>
     ),
     // Suppress images — the AI sometimes generates ![chart](...) markdown which renders as broken <img>
     img: () => null,
@@ -1355,8 +1355,8 @@ export default function AiChatBubble() {
                         className="ai-chat-fab group"
                         title="Open AI Chat"
                     >
-                        <Sparkles className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
-                        <div className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-violet-500 animate-pulse" />
+                        <Sparkles className="w-5 h-5 transition-colors" aria-hidden />
+                        <span className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-emerald-400 ring-2 ring-ink-100" aria-hidden />
                     </button>
                 ) : (
                     <div
@@ -1568,10 +1568,10 @@ export default function AiChatBubble() {
                                             </div>
                                             {isLoadingThreads ? (
                                                 <div className="flex items-center justify-center py-8">
-                                                    <Loader2 className="w-4 h-4 text-zinc-600 animate-spin" />
+                                                    <Loader2 className="w-4 h-4 text-paper-dim animate-spin" />
                                                 </div>
                                             ) : threads.length === 0 ? (
-                                                <p className="text-sm text-zinc-600 text-center py-8">No conversations yet</p>
+                                                <p className="text-[12px] text-paper-faint text-center py-8">No conversations yet</p>
                                             ) : (
                                                 <div className="py-2">
                                                     <CollapsibleThreadGroup
@@ -1611,7 +1611,7 @@ export default function AiChatBubble() {
                                                         defaultExpanded={true}
                                                     />
                                                     {groupedThreads.recent.length === 0 && groupedThreads.last24Hours.length === 0 && groupedThreads.last7Days.length === 0 && (
-                                                        <p className="text-sm text-zinc-600 text-center py-8">No recent conversations</p>
+                                                        <p className="text-[12px] text-paper-faint text-center py-8">No recent conversations</p>
                                                     )}
                                                 </div>
                                             )}
@@ -1742,23 +1742,23 @@ export default function AiChatBubble() {
                                                                     style={{ animation: `fadeSlideIn 0.3s ease-out ${Math.min(idx * 0.05, 0.3)}s both` }}
                                                                 >
                                                         {msg.role === 'assistant' && (
-                                                            <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5
+                                                            <div className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-xs border
                                                               ${msg.isError
-                                                                    ? 'bg-red-500/15 ring-1 ring-red-500/20'
-                                                                    : 'bg-gradient-to-br from-violet-500/20 to-indigo-500/20 ring-1 ring-white/[0.06]'}`}>
+                                                                    ? 'border-red-900/60 bg-red-950/40'
+                                                                    : 'border-brand/40 bg-brand/5'}`}>
                                                                 {msg.isError
-                                                                    ? <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                                                                    : <Bot className="w-3.5 h-3.5 text-violet-400" />}
+                                                                    ? <AlertCircle className="w-3.5 h-3.5 text-red-300" />
+                                                                    : <Bot className="w-3.5 h-3.5 text-brand" />}
                                                             </div>
                                                         )}
-                                                        <div className={`flex flex-col gap-0.5 min-w-0 ${msg.role === 'assistant' && msg.chartSpecs?.length ? 'flex-1' : ''}`} style={{ maxWidth: msg.role === 'user' ? '75%' : '85%' }}>
+                                                        <div className={`flex flex-col gap-1 min-w-0 ${msg.role === 'assistant' && msg.chartSpecs?.length ? 'flex-1' : ''}`} style={{ maxWidth: msg.role === 'user' ? '75%' : '85%' }}>
                                                             <div
-                                                                className={`rounded-2xl px-4 py-3 text-sm leading-relaxed overflow-hidden
+                                                                className={`rounded-xs px-3 py-2.5 text-[13px] leading-relaxed overflow-hidden border
                                                               ${msg.role === 'user'
-                                                                        ? 'bg-violet-500/15 text-zinc-100 border border-violet-500/15'
+                                                                        ? 'border-ink-500 bg-ink-200 text-paper'
                                                                         : msg.isError
-                                                                            ? 'bg-red-500/10 text-red-300 border border-red-500/15'
-                                                                            : 'bg-white/[0.04] text-zinc-200 border border-white/[0.06]'
+                                                                            ? 'border-red-900/60 bg-red-950/40 text-red-200'
+                                                                            : 'border-ink-500 bg-ink-100 text-paper'
                                                                     }`}
                                                             >
                                                                 {msg.role === 'assistant' ? (
@@ -1770,21 +1770,21 @@ export default function AiChatBubble() {
                                                                             />
                                                                         )}
                                                                         {msg.isStreaming && msg.toolStatus && !msg.content && !msg.toolCalls?.length && (
-                                                                            <div className="flex items-center gap-2 text-violet-400/80 text-xs py-1">
+                                                                            <div className="flex items-center gap-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-brand">
                                                                                 <Loader2 className="w-3 h-3 animate-spin" />
                                                                                 <span>{msg.toolStatus}</span>
                                                                             </div>
                                                                         )}
                                                                         {msg.isError ? (
                                                                             <div className="flex flex-col gap-2">
-                                                                                <p className="text-sm text-red-300/90">{msg.content}</p>
+                                                                                <p className="text-[13px] text-red-200">{msg.content}</p>
                                                                                 {msg.retryPrompt && (msg.retryable !== false) && (
                                                                                     <button
                                                                                         onClick={() => handleRetry(msg.retryPrompt!)}
                                                                                         disabled={isStreaming}
-                                                                                        className="flex items-center gap-1.5 text-xs text-red-400/80 hover:text-red-300
+                                                                                        className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-red-300 hover:text-red-200
                                                                                      disabled:opacity-40 transition-colors self-start
-                                                                                     px-2 py-1 rounded-lg hover:bg-red-500/10"
+                                                                                     px-2 py-1 rounded-xs hover:bg-red-950/40"
                                                                                         aria-label="Retry"
                                                                                     >
                                                                                         <RefreshCw className="w-3 h-3" />
@@ -1813,11 +1813,11 @@ export default function AiChatBubble() {
                                                                 )}
                                                             </div>
                                                             <div className={`flex items-center gap-1 px-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                                                <span className="text-[10px] text-zinc-600">{timeAgo(msg.createdAt)}</span>
+                                                                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">{timeAgo(msg.createdAt)}</span>
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => copyToClipboard(msg.content, 'Message')}
-                                                                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10 text-zinc-500 hover:text-zinc-300 transition-all"
+                                                                    className="p-1 rounded-xs opacity-0 group-hover:opacity-100 hover:bg-ink-300 text-paper-dim hover:text-paper transition-colors"
                                                                     title="Copy message"
                                                                     aria-label="Copy message"
                                                                 >
