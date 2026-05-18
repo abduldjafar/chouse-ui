@@ -444,8 +444,15 @@ export default function FloatingDock() {
     window.dispatchEvent(new CustomEvent("dock:mode-change", { detail: { mode: newMode } }));
   };
 
+  // Sync App.tsx layout state on mount. Defer to a microtask so any parent
+  // effect that attaches a listener has a chance to register first (React
+  // runs child effects before parent effects, otherwise this event is lost).
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent("dock:mode-change", { detail: { mode: dockMode } }));
+    saveDockModeToLocal(dockMode);
+    const id = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("dock:mode-change", { detail: { mode: dockMode } }));
+    }, 0);
+    return () => window.clearTimeout(id);
   }, []);
 
   const startDrag = (event: React.PointerEvent) => {
