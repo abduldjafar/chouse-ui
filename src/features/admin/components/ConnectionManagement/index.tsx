@@ -569,7 +569,7 @@ export default function ConnectionManagement() {
           <div className="flex flex-col gap-0.5">
             <h2 className="text-[18px] font-semibold tracking-tight text-paper">ClickHouse connections</h2>
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
-              Manage your ClickHouse server connections
+              Servers, credentials, who can reach them
             </p>
           </div>
         </div>
@@ -611,8 +611,8 @@ export default function ConnectionManagement() {
           <div className="mb-3 grid h-12 w-12 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-dim">
             <Server className="h-5 w-5" aria-hidden />
           </div>
-          <h3 className="text-[15px] font-medium text-paper">No connections configured</h3>
-          <p className="mt-1 text-[13px] text-paper-muted">Add your first ClickHouse connection to get started.</p>
+          <h3 className="text-[15px] font-medium text-paper">No connections yet</h3>
+          <p className="mt-1 text-[13px] text-paper-muted">Wire up a ClickHouse server — host, port, credentials.</p>
           {canEdit && (
             <Button
               size="sm"

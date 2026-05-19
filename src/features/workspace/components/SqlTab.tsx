@@ -432,11 +432,14 @@ const SqlTab: React.FC<SqlTabProps> = ({ tabId }) => {
   );
 
   const renderEmpty = () => (
-    <div className="h-full flex items-center justify-center">
-      <div className="flex flex-col items-center">
-        <FileX2 size={48} className="text-muted-foreground mb-4" />
-        <p className="text-sm text-muted-foreground">
-          There's no data yet! Run a query to get started.
+    <div className="h-full flex items-center justify-center px-6">
+      <div className="flex flex-col items-center text-center">
+        <FileX2 size={32} className="text-paper-faint mb-3" aria-hidden />
+        <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-paper-dim">
+          Nothing to show
+        </p>
+        <p className="mt-2 text-[12px] text-paper-muted">
+          Run a query and the result lands here.
         </p>
       </div>
     </div>

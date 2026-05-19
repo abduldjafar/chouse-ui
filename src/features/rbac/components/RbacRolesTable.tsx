@@ -239,8 +239,8 @@ export const RbacRolesTable: React.FC<RbacRolesTableProps> = ({
             <div className="mb-4 grid h-12 w-12 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-dim">
               <Shield className="h-5 w-5" aria-hidden />
             </div>
-            <p className="text-[15px] font-semibold text-paper">No roles found</p>
-            <p className="mt-1 text-[13px] text-paper-muted">Create your first role to get started.</p>
+            <p className="text-[15px] font-semibold text-paper">No roles yet</p>
+            <p className="mt-1 text-[13px] text-paper-muted">Roles bundle permissions so you don't repeat yourself.</p>
           </div>
         ) : (
           <AnimatePresence mode="popLayout">

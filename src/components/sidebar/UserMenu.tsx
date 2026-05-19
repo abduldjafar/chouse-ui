@@ -125,7 +125,7 @@ export default function UserMenu({ isCollapsed }: UserMenuProps) {
                 </span>
                 <span className="mt-1 inline-flex items-center gap-1.5 border-t border-ink-500 pt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-red-400">
                   <LogOut className="h-3 w-3" />
-                  Click to log out
+                  Sign out
                 </span>
               </div>
             </TooltipContent>

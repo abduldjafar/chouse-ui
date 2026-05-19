@@ -571,12 +571,12 @@ const UserManagement: React.FC = () => {
             <div className="rounded-xs border border-ink-500 bg-ink-100 px-6 py-16 text-center">
               <Users className="mx-auto mb-4 h-8 w-8 text-paper-faint" aria-hidden />
               <h3 className="font-mono text-[11px] uppercase tracking-[0.18em] text-paper-dim">
-                {hasActiveFilters ? "No users found" : "No users configured"}
+                {hasActiveFilters ? "No matches" : "No users yet"}
               </h3>
               <p className="mt-2 text-[12px] text-paper-muted">
                 {hasActiveFilters
-                  ? "Try adjusting your search or filters."
-                  : "Get started by creating your first user."}
+                  ? "Loosen the filters — or clear them to see everyone."
+                  : "Add a user to give someone RBAC-controlled access."}
               </p>
               <div className="mt-4 flex justify-center">
               {hasActiveFilters ? (

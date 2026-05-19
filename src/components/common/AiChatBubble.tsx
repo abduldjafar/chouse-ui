@@ -1635,11 +1635,11 @@ export default function AiChatBubble() {
                                                     CHouse AI
                                                 </span>
                                                 <h3 className="mb-2 text-xl font-semibold tracking-tight text-paper">
-                                                    Ask anything about{" "}
-                                                    <span className="text-paper-dim">your ClickHouse data.</span>
+                                                    What do you want to{" "}
+                                                    <span className="text-paper-dim">know?</span>
                                                 </h3>
                                                 <p className="mb-8 max-w-md text-[13px] leading-relaxed text-paper-muted">
-                                                    Explore schemas, write queries, analyze performance, and get insights — straight from the editor.
+                                                    Ask about a table, draft a query, debug an error — the assistant has read access to your schema.
                                                 </p>
                                                 {/* Suggested prompts */}
                                                 <div className="mb-6 w-full max-w-lg">

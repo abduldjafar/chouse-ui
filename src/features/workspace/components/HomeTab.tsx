@@ -151,8 +151,9 @@ const HomeTab = () => {
                     ))}
                   </div>
                 ) : (
-                  <div className="flex h-full items-center justify-center px-6 py-10 text-center">
-                    <p className="text-sm text-paper-muted">No saved queries yet.</p>
+                  <div className="flex h-full flex-col items-center justify-center gap-1 px-6 py-10 text-center">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-paper-dim">Nothing saved</p>
+                    <p className="text-[12px] text-paper-muted">Press ⌘S in the editor to save a query.</p>
                   </div>
                 )}
               </ScrollArea>

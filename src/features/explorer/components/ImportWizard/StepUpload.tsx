@@ -77,8 +77,8 @@ export function StepUpload({
                             <Upload className="h-6 w-6" />
                         </div>
                         <div>
-                            <p className="text-sm font-medium text-white">Drop your file here</p>
-                            <p className="text-xs text-gray-500 mt-0.5">or click to browse · CSV, JSON, or TSV</p>
+                            <p className="text-sm font-medium text-white">Drop a file</p>
+                            <p className="text-xs text-gray-500 mt-0.5">or browse · CSV / JSON / TSV</p>
                         </div>
                     </div>
                 </div>

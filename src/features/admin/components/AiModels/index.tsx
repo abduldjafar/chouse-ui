@@ -15,7 +15,7 @@ export default function AiModelsManagement() {
                 <div className="flex flex-col gap-0.5">
                     <h2 className="text-[18px] font-semibold tracking-tight text-paper">AI models</h2>
                     <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
-                        Manage AI providers, SDK models, and user-facing configurations
+                        Provider keys, SDK model IDs, deployments
                     </p>
                 </div>
             </div>

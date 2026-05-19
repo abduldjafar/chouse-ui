@@ -352,7 +352,7 @@ export default function ConnectionSelector({
               <div className="flex min-w-0 flex-1 flex-col text-left">
                 <span className="truncate text-[12px] font-medium text-paper">{conn.name}</span>
                 <span className="truncate font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
-                  {isConnected ? "Connected" : "Click to connect"}
+                  {isConnected ? "Connected" : "Connect"}
                 </span>
               </div>
             )}
@@ -360,7 +360,7 @@ export default function ConnectionSelector({
         </TooltipTrigger>
         {isCollapsed && (
           <TooltipContent side="right" className={TOOLTIP_CLASS}>
-            {conn.name} · {isConnected ? "Connected" : "Click to connect"}
+            {conn.name} · {isConnected ? "Connected" : "Connect"}
           </TooltipContent>
         )}
       </Tooltip>

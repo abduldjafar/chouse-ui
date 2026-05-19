@@ -178,7 +178,7 @@ export default function Admin() {
                 <span>Administration</span>
               </span>
               <h1 className="text-2xl font-semibold tracking-tight text-paper">
-                Manage users, roles & access
+                Who can do what, where.
               </h1>
             </div>
           </div>
@@ -273,7 +273,7 @@ export default function Admin() {
       >
         <div className="flex flex-col gap-4">
           <p className="text-[13px] text-paper-muted">
-            Manage system users, roles, and permissions using role-based access control (RBAC).
+            Identity, roles, permissions. RBAC at the seams so you can stop hand-rolling access checks.
           </p>
 
           <ul className="flex flex-col gap-2 text-[13px] text-paper-muted">
