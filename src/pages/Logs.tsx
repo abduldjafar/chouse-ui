@@ -17,6 +17,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   CalendarRange,
+  GitCompare,
 } from "lucide-react";
 import { format as formatDate } from "date-fns";
 
@@ -31,6 +32,13 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useQueryLogs, usePaginationPreference, useLogsPreferences } from "@/hooks";
 import {
   useClusterMemoryTotal,
@@ -327,6 +335,16 @@ export default function LogsPage({
   const [currentPage, setCurrentPage] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("event_time");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((cur) => {
+      if (cur.includes(id)) return cur.filter((x) => x !== id);
+      if (cur.length >= 2) return [cur[1], id]; // keep last 2
+      return [...cur, id];
+    });
+  };
 
   // Cluster RAM, used downstream to flag queries that ate > 40% of it.
   const { data: clusterMemoryBytes = 0 } = useClusterMemoryTotal();
@@ -725,6 +743,30 @@ export default function LogsPage({
             </Button>
           )}
 
+          {view === "queries" && selectedIds.length > 0 && (
+            <div className="inline-flex items-center gap-1.5 rounded-xs border border-brand/40 bg-brand/[0.08] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-brand">
+              <span>{selectedIds.length} selected</span>
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                aria-label="Clear selection"
+                className="rounded-xs px-0.5 hover:bg-brand/10"
+              >
+                <X className="h-3 w-3" />
+              </button>
+              <span className="mx-1 text-paper-faint">·</span>
+              <button
+                type="button"
+                onClick={() => setCompareOpen(true)}
+                disabled={selectedIds.length < 2}
+                className="inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-brand transition-colors hover:bg-brand hover:text-ink-50 disabled:opacity-40"
+              >
+                <GitCompare className="h-3 w-3" />
+                Compare
+              </button>
+            </div>
+          )}
+
           {/* Spacer */}
           <div className="ml-auto flex items-center gap-3">
             {/* Time range — single unified popover (presets + custom calendar) */}
@@ -927,7 +969,7 @@ export default function LogsPage({
               isLoading ? (
                 <table className="w-full">
                   <tbody>
-                    <SkeletonRows count={10} cols={9} />
+                    <SkeletonRows count={10} cols={10} />
                   </tbody>
                 </table>
               ) : totalRows === 0 ? (
@@ -952,6 +994,8 @@ export default function LogsPage({
                   sortDir={sortDir}
                   onSort={toggleSort}
                   clusterMemoryBytes={clusterMemoryBytes}
+                  selectedIds={selectedIds}
+                  onSelect={toggleSelect}
                 />
               )
             ) : view === "patterns" ? (
@@ -1066,6 +1110,233 @@ export default function LogsPage({
         </div>
         )}
       </div>
+
+      <CompareDialog
+        open={compareOpen}
+        onOpenChange={setCompareOpen}
+        entries={selectedIds
+          .map((id) => filteredLogs.find((l) => l.query_id === id))
+          .filter((l): l is LogEntry => !!l)}
+        clusterMemoryBytes={clusterMemoryBytes}
+      />
+    </div>
+  );
+}
+
+/* ============================================================
+   Compare dialog — side-by-side metric diff
+   ============================================================ */
+
+interface CompareDialogProps {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  entries: LogEntry[];
+  clusterMemoryBytes: number;
+}
+
+interface CompareMetric {
+  label: string;
+  format: (e: LogEntry) => string;
+  value: (e: LogEntry) => number;
+  /** Lower is better — used to colour the delta tone. */
+  lowerBetter?: boolean;
+}
+
+const COMPARE_METRICS: CompareMetric[] = [
+  {
+    label: "Duration",
+    format: (e) => formatDuration(e.query_duration_ms),
+    value: (e) => e.query_duration_ms,
+    lowerBetter: true,
+  },
+  {
+    label: "Memory",
+    format: (e) => formatBytes(e.memory_usage),
+    value: (e) => e.memory_usage,
+    lowerBetter: true,
+  },
+  {
+    label: "Read rows",
+    format: (e) => e.read_rows.toLocaleString(),
+    value: (e) => e.read_rows,
+    lowerBetter: true,
+  },
+  {
+    label: "Read bytes",
+    format: (e) => formatBytes(e.read_bytes),
+    value: (e) => e.read_bytes,
+    lowerBetter: true,
+  },
+];
+
+function CompareDialog({
+  open,
+  onOpenChange,
+  entries,
+  clusterMemoryBytes,
+}: CompareDialogProps) {
+  if (entries.length < 2) return null;
+  const [a, b] = entries;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[1100px] rounded-xs border-ink-700 bg-ink-100 p-0">
+        <DialogHeader className="border-b border-ink-500 px-5 py-4">
+          <DialogTitle className="flex items-center gap-3 text-paper">
+            <span className="grid h-9 w-9 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-muted">
+              <GitCompare className="h-4 w-4" aria-hidden />
+            </span>
+            <span className="flex flex-col gap-0.5 text-left">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+                Side by side
+              </span>
+              <span className="text-[15px] font-semibold tracking-tight">
+                Compare two queries
+              </span>
+            </span>
+          </DialogTitle>
+          <DialogDescription className="text-[12px] text-paper-muted">
+            Metric diff with delta tints. Memory cells inherit the cluster-RAM
+            warn / danger flag.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid max-h-[55vh] grid-cols-2 divide-x divide-ink-500 overflow-auto">
+          <CompareColumn label="Query A" entry={a} clusterMemoryBytes={clusterMemoryBytes} />
+          <CompareColumn label="Query B" entry={b} clusterMemoryBytes={clusterMemoryBytes} />
+        </div>
+
+        <div className="border-t border-ink-500 px-5 py-4">
+          <h3 className="mb-3 font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+            Diff
+          </h3>
+          <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xs border border-ink-500 bg-ink-500">
+            {COMPARE_METRICS.map((m) => {
+              const va = m.value(a);
+              const vb = m.value(b);
+              const delta = vb - va;
+              const pct = va > 0 ? (delta / va) * 100 : 0;
+              const better = m.lowerBetter ? delta < 0 : delta > 0;
+              const tone =
+                delta === 0
+                  ? "text-paper-muted"
+                  : better
+                    ? "text-emerald-300"
+                    : "text-red-300";
+              const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
+              const absDelta = Math.abs(delta);
+              const formattedDelta =
+                m.label === "Duration"
+                  ? formatDuration(absDelta)
+                  : m.label.includes("bytes") || m.label === "Memory"
+                    ? formatBytes(absDelta)
+                    : absDelta.toLocaleString();
+              return (
+                <div
+                  key={m.label}
+                  className="grid grid-cols-[160px_1fr_1fr_180px] items-center gap-3 bg-ink-100 px-4 py-2 text-[12px]"
+                >
+                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
+                    {m.label}
+                  </span>
+                  <span className="font-mono text-paper">{m.format(a)}</span>
+                  <span className="font-mono text-paper">{m.format(b)}</span>
+                  <span className={cn("text-right font-mono tabular-nums", tone)}>
+                    {sign}
+                    {formattedDelta}
+                    {Number.isFinite(pct) && va > 0 && (
+                      <span className="ml-2 text-[10px] opacity-70">
+                        ({sign}
+                        {Math.abs(pct).toFixed(0)}%)
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CompareColumn({
+  label,
+  entry,
+  clusterMemoryBytes,
+}: {
+  label: string;
+  entry: LogEntry;
+  clusterMemoryBytes: number;
+}) {
+  const memTier = memoryTier(entry.memory_usage, clusterMemoryBytes);
+  return (
+    <div className="flex flex-col gap-4 p-5">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+          {label}
+        </span>
+        <span className="font-mono text-[10px] text-paper-dim">
+          {entry.query_id.substring(0, 12)}…
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-paper-faint">
+          Query
+        </span>
+        <pre className="max-h-[200px] overflow-auto whitespace-pre-wrap break-words rounded-xs border border-ink-500 bg-ink-200 p-3 font-mono text-[11px] leading-[1.55] text-paper">
+          {highlightSql(entry.query)}
+        </pre>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <CompareCell label="Duration" value={formatDuration(entry.query_duration_ms)} />
+        <CompareCell
+          label="Memory"
+          value={formatBytes(entry.memory_usage)}
+          tone={
+            memTier === "danger"
+              ? "text-red-300"
+              : memTier === "warn"
+                ? "text-amber-300"
+                : undefined
+          }
+        />
+        <CompareCell label="Read rows" value={entry.read_rows.toLocaleString()} />
+        <CompareCell label="Read bytes" value={formatBytes(entry.read_bytes)} />
+      </div>
+
+      {entry.exception && (
+        <div>
+          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-red-300">
+            Exception
+          </span>
+          <pre className="mt-1 max-h-[140px] overflow-auto whitespace-pre-wrap rounded-xs border border-red-900/60 bg-red-950/40 p-3 font-mono text-[11px] text-red-200">
+            {entry.exception}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompareCell({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1 border-l border-ink-500 pl-3">
+      <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-paper-faint">
+        {label}
+      </span>
+      <span className={cn("font-mono text-[12px] text-paper", tone)}>{value}</span>
     </div>
   );
 }
@@ -1093,6 +1364,7 @@ interface ColumnSpec {
 }
 
 const COLUMNS: ColumnSpec[] = [
+  { key: null, label: "", align: "left", w: "w-[36px]" },
   { key: "event_time", label: "Time", align: "left", w: "w-[140px]" },
   { key: "type", label: "", align: "left", w: "w-[28px]" },
   { key: "query", label: "Query", align: "left" },
@@ -1149,6 +1421,8 @@ interface LogsTableProps {
   onSort: (key: SortKey) => void;
   /** Total cluster RAM in bytes; used to flag memory-heavy queries. 0 disables. */
   clusterMemoryBytes: number;
+  selectedIds: string[];
+  onSelect: (queryId: string) => void;
 }
 
 /**
@@ -1180,6 +1454,8 @@ function LogsTable({
   sortDir,
   onSort,
   clusterMemoryBytes,
+  selectedIds,
+  onSelect,
 }: LogsTableProps) {
   return (
     <TooltipProvider delayDuration={300}>
@@ -1237,6 +1513,8 @@ function LogsTable({
             onToggle={() => onToggle(log.query_id)}
             failed={isFailed(log)}
             clusterMemoryBytes={clusterMemoryBytes}
+            selected={selectedIds.includes(log.query_id)}
+            onSelect={() => onSelect(log.query_id)}
           />
         ))}
       </tbody>
@@ -1532,9 +1810,19 @@ interface LogRowProps {
   onToggle: () => void;
   failed: boolean;
   clusterMemoryBytes: number;
+  selected: boolean;
+  onSelect: () => void;
 }
 
-function LogRow({ log, isExpanded, onToggle, failed, clusterMemoryBytes }: LogRowProps) {
+function LogRow({
+  log,
+  isExpanded,
+  onToggle,
+  failed,
+  clusterMemoryBytes,
+  selected,
+  onSelect,
+}: LogRowProps) {
   const memTier = memoryTier(log.memory_usage, clusterMemoryBytes);
   const memRatioPct =
     clusterMemoryBytes > 0 ? (log.memory_usage / clusterMemoryBytes) * 100 : 0;
@@ -1552,9 +1840,51 @@ function LogRow({ log, isExpanded, onToggle, failed, clusterMemoryBytes }: LogRo
         onClick={onToggle}
         className={cn(
           "cursor-pointer border-b border-ink-500/60 transition-colors",
-          isExpanded ? "bg-ink-200" : "hover:bg-ink-200/60"
+          isExpanded
+            ? "bg-ink-200"
+            : selected
+              ? "bg-brand/[0.04] hover:bg-brand/[0.06]"
+              : "hover:bg-ink-200/60"
         )}
       >
+        <td
+          className="px-3 py-1.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          <span
+            role="checkbox"
+            aria-checked={selected}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === " " || e.key === "Enter") {
+                e.preventDefault();
+                onSelect();
+              }
+            }}
+            className={cn(
+              "grid h-3.5 w-3.5 cursor-pointer place-items-center rounded-xs border transition-colors",
+              selected
+                ? "border-brand bg-brand text-ink-50"
+                : "border-ink-500 bg-ink-200 hover:border-ink-700"
+            )}
+          >
+            {selected && (
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                className="h-2.5 w-2.5"
+                aria-hidden
+              >
+                <polyline points="3 8 7 12 13 4" />
+              </svg>
+            )}
+          </span>
+        </td>
         <td className="px-3 py-1.5 font-mono text-paper-muted whitespace-nowrap">
           <span title={`${log.event_date} ${log.event_time}`}>
             {formatRowTime(log.event_date, log.event_time)}
