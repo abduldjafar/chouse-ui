@@ -12,6 +12,10 @@ import {
   X,
   Copy,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -71,13 +75,12 @@ interface ProcessedLogsResult {
 
 /**
  * Filter + dedup logs by query_id. ExceptionWhileProcessing > QueryStart-with-exception
- * > QueryFinish > QueryStart. Returns the limited, sorted list plus the set of
- * query_ids that ever carried an exception entry.
+ * > QueryFinish > QueryStart. Returns the full sorted list (paging happens in
+ * the render layer) plus the set of query_ids that ever carried an exception.
  */
 function processLogs(
   logs: LogEntry[],
-  filters: LogFilterParams,
-  limit: number
+  filters: LogFilterParams
 ): ProcessedLogsResult {
   const { searchTerm, logType, selectedRoleId, usersByRoleData } = filters;
 
@@ -179,7 +182,7 @@ function processLogs(
     return b.event_time.localeCompare(a.event_time);
   });
 
-  return { logs: deduplicated.slice(0, limit), exceptionQueryIds };
+  return { logs: deduplicated, exceptionQueryIds };
 }
 
 const RANGE_OPTIONS: Array<{ label: string; hours: number }> = [
@@ -230,8 +233,8 @@ export default function LogsPage({
     usePaginationPreference("logs");
   const { preferences: logsPrefs, updatePreferences: updateLogsPrefs } = useLogsPreferences();
 
-  const [limit, setLimit] = useState(defaultLimit);
-  useEffect(() => setLimit(defaultLimit), [defaultLimit]);
+  const [pageSize, setPageSize] = useState(defaultLimit);
+  useEffect(() => setPageSize(defaultLimit), [defaultLimit]);
 
   const [searchTerm, setSearchTerm] = useState(logsPrefs.defaultSearchQuery || "");
   const [logType, setLogType] = useState<string>(logsPrefs.defaultLogType || "all");
@@ -247,6 +250,7 @@ export default function LogsPage({
   );
   const [timeRangeHours, setTimeRangeHours] = useState<number>(6);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
   const bucket = bucketFor(timeRangeHours);
 
@@ -263,9 +267,9 @@ export default function LogsPage({
   }, [logType, autoRefresh, selectedUserId, selectedRoleId, updateLogsPrefs]);
 
   useEffect(() => {
-    const id = setTimeout(() => setLimitPreference(limit), 500);
+    const id = setTimeout(() => setLimitPreference(pageSize), 500);
     return () => clearTimeout(id);
-  }, [limit, setLimitPreference]);
+  }, [pageSize, setLimitPreference]);
 
   const clearFilters = () => {
     setSearchTerm("");
@@ -308,8 +312,10 @@ export default function LogsPage({
       : undefined
     : user?.id;
 
-  const multiplier = hasActiveFilters ? 20 : 5;
-  const fetchLimit = Math.max(limit * multiplier, 1000);
+  // Over-fetch so that client-side dedup + pagination has enough material per page.
+  // The cap (5k unfiltered / 20k filtered) is the upper bound a single fetch will
+  // pull; beyond that the user needs to narrow the time range or filters.
+  const fetchLimit = hasActiveFilters ? Math.max(pageSize * 20, 5000) : Math.max(pageSize * 5, 1000);
   const {
     data: logs = [],
     isLoading,
@@ -337,21 +343,32 @@ export default function LogsPage({
 
   const processed = useMemo(
     () =>
-      processLogs(
-        logs,
-        {
-          searchTerm,
-          logType,
-          selectedRoleId,
-          usersByRoleData: usersByRoleData || null,
-        },
-        limit
-      ),
-    [logs, searchTerm, logType, selectedRoleId, usersByRoleData, limit]
+      processLogs(logs, {
+        searchTerm,
+        logType,
+        selectedRoleId,
+        usersByRoleData: usersByRoleData || null,
+      }),
+    [logs, searchTerm, logType, selectedRoleId, usersByRoleData]
   );
 
   const filteredLogs = processed.logs;
   const exceptionQueryIds = processed.exceptionQueryIds;
+
+  const totalRows = filteredLogs.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const safePage = Math.min(currentPage, totalPages - 1);
+  const startIndex = safePage * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalRows);
+  const paginatedRows = useMemo(
+    () => filteredLogs.slice(startIndex, endIndex),
+    [filteredLogs, startIndex, endIndex]
+  );
+
+  // Reset to the first page when the filter set, time range, or page size changes.
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [searchTerm, logType, selectedUserId, selectedRoleId, timeRangeHours, pageSize]);
 
   const isFailedLog = useCallback(
     (log: LogEntry): boolean => {
@@ -480,20 +497,20 @@ export default function LogsPage({
           )}
 
           <Select
-            value={String(limit)}
+            value={String(pageSize)}
             onValueChange={(v) => {
               const n = Number(v);
-              if (!isNaN(n) && n > 0) setLimit(n);
+              if (!isNaN(n) && n > 0) setPageSize(n);
             }}
           >
-            <SelectTrigger className="h-8 w-[100px] rounded-xs border-ink-500 bg-ink-200 font-mono text-[11px] text-paper">
+            <SelectTrigger className="h-8 w-[110px] rounded-xs border-ink-500 bg-ink-200 font-mono text-[11px] text-paper">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="50">50 rows</SelectItem>
-              <SelectItem value="100">100 rows</SelectItem>
-              <SelectItem value="500">500 rows</SelectItem>
-              <SelectItem value="1000">1000 rows</SelectItem>
+              <SelectItem value="50">50 / page</SelectItem>
+              <SelectItem value="100">100 / page</SelectItem>
+              <SelectItem value="500">500 / page</SelectItem>
+              <SelectItem value="1000">1000 / page</SelectItem>
             </SelectContent>
           </Select>
 
@@ -545,7 +562,7 @@ export default function LogsPage({
             </span>
 
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
-              {filteredLogs.length.toLocaleString()} / {logs.length.toLocaleString()} queries
+              Total · {totalRows.toLocaleString()}
             </span>
           </div>
         </div>
@@ -569,13 +586,13 @@ export default function LogsPage({
         )}
 
         {/* Table card */}
-        <div className="flex-1 min-h-0 overflow-hidden rounded-md border border-ink-500 bg-ink-100">
-          <div className="h-full overflow-auto">
+        <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-md border border-ink-500 bg-ink-100">
+          <div className="flex-1 overflow-auto">
             {isLoading ? (
               <div className="p-4">
                 <SkeletonRows count={10} cols={7} />
               </div>
-            ) : filteredLogs.length === 0 ? (
+            ) : totalRows === 0 ? (
               <div className="flex h-64 flex-col items-center justify-center gap-2 px-4 text-center">
                 <span className="grid h-12 w-12 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-dim">
                   <FileText className="h-5 w-5" aria-hidden />
@@ -589,16 +606,113 @@ export default function LogsPage({
               </div>
             ) : (
               <LogsTable
-                rows={filteredLogs}
+                rows={paginatedRows}
                 expanded={expandedLog}
                 onToggle={(id) => setExpandedLog((cur) => (cur === id ? null : id))}
                 isFailed={isFailedLog}
               />
             )}
           </div>
+
+          {totalRows > 0 && (
+            <PaginationBar
+              page={safePage}
+              totalPages={totalPages}
+              startIndex={startIndex}
+              endIndex={endIndex}
+              totalRows={totalRows}
+              onPrev={() => setCurrentPage((p) => Math.max(0, p - 1))}
+              onNext={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+              onFirst={() => setCurrentPage(0)}
+              onLast={() => setCurrentPage(totalPages - 1)}
+            />
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+interface PaginationBarProps {
+  page: number;
+  totalPages: number;
+  startIndex: number;
+  endIndex: number;
+  totalRows: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onFirst: () => void;
+  onLast: () => void;
+}
+
+function PaginationBar({
+  page,
+  totalPages,
+  startIndex,
+  endIndex,
+  totalRows,
+  onPrev,
+  onNext,
+  onFirst,
+  onLast,
+}: PaginationBarProps) {
+  const atStart = page === 0;
+  const atEnd = page >= totalPages - 1;
+
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-ink-500 bg-ink-200/50 px-3 py-2">
+      <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
+        {(startIndex + 1).toLocaleString()}–{endIndex.toLocaleString()} of{" "}
+        {totalRows.toLocaleString()}
+      </span>
+
+      <div className="flex items-center gap-1">
+        <PageBtn onClick={onFirst} disabled={atStart} label="First page">
+          <ChevronsLeft className="h-3.5 w-3.5" />
+        </PageBtn>
+        <PageBtn onClick={onPrev} disabled={atStart} label="Previous page">
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </PageBtn>
+        <span className="px-2 font-mono text-[11px] text-paper">
+          {(page + 1).toLocaleString()} / {totalPages.toLocaleString()}
+        </span>
+        <PageBtn onClick={onNext} disabled={atEnd} label="Next page">
+          <ChevronRight className="h-3.5 w-3.5" />
+        </PageBtn>
+        <PageBtn onClick={onLast} disabled={atEnd} label="Last page">
+          <ChevronsRight className="h-3.5 w-3.5" />
+        </PageBtn>
+      </div>
+    </div>
+  );
+}
+
+function PageBtn({
+  onClick,
+  disabled,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className={cn(
+        "grid h-7 w-7 place-items-center rounded-xs border border-ink-500 bg-ink-100 text-paper-muted transition-colors",
+        disabled
+          ? "cursor-not-allowed opacity-40"
+          : "hover:border-ink-700 hover:bg-ink-300 hover:text-paper"
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
