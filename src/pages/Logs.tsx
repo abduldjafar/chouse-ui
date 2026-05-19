@@ -32,7 +32,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { useQueryLogs, usePaginationPreference, useLogsPreferences } from "@/hooks";
-import { useClusterMemoryTotal } from "@/hooks/useMonitoringTimeline";
+import {
+  useClusterMemoryTotal,
+  useQueryProfileEvents,
+  type ProfileEventEntry,
+} from "@/hooks/useMonitoringTimeline";
 import { useRbacStore, RBAC_PERMISSIONS } from "@/stores";
 import { cn } from "@/lib/utils";
 import { DataControls } from "@/components/common/DataControls";
@@ -1201,8 +1205,112 @@ function LogDetail({ log, failed, onClose }: LogDetailProps) {
         <MetaCell label="ClickHouse user" value={log.user} />
         <MetaCell label="Event time" value={`${log.event_date} ${log.event_time}`} />
       </div>
+
+      <ProfileEventsBlock queryId={log.query_id} />
     </div>
   );
+}
+
+interface ProfileEventsBlockProps {
+  queryId: string;
+}
+
+/**
+ * Lazy-loaded panel showing the top ProfileEvents emitted by this query —
+ * surfaces things like OSCPUVirtualTimeMicroseconds, NetworkSendBytes,
+ * MarkCacheMisses, etc. Sits below the meta grid in the expanded row.
+ */
+function ProfileEventsBlock({ queryId }: ProfileEventsBlockProps) {
+  const [showAll, setShowAll] = useState(false);
+  const { data: events = [], isLoading, error } = useQueryProfileEvents(queryId);
+
+  const visible = showAll ? events : events.slice(0, 20);
+  const maxValue = events[0]?.value ?? 0;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
+          Profile events
+        </span>
+        {!isLoading && events.length > 20 && (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-muted hover:text-paper"
+          >
+            {showAll ? `Show top 20` : `Show all (${events.length})`}
+          </button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-xs border border-ink-500 bg-ink-200 p-3 font-mono text-[11px] text-paper-faint">
+          Loading profile events…
+        </div>
+      ) : error ? (
+        <div className="rounded-xs border border-red-900/60 bg-red-950/40 p-3 font-mono text-[11px] text-red-200">
+          Couldn't load profile events — {error.message}
+        </div>
+      ) : events.length === 0 ? (
+        <div className="rounded-xs border border-ink-500 bg-ink-200 p-3 font-mono text-[11px] text-paper-faint">
+          No profile events recorded for this query.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xs border border-ink-500 bg-ink-500 md:grid-cols-2">
+          {visible.map((evt) => (
+            <ProfileEventRow key={evt.name} event={evt} maxValue={maxValue} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ProfileEventRowProps {
+  event: ProfileEventEntry;
+  maxValue: number;
+}
+
+function ProfileEventRow({ event, maxValue }: ProfileEventRowProps) {
+  const ratio = maxValue > 0 ? event.value / maxValue : 0;
+  const formatted = formatProfileEvent(event.name, event.value);
+  return (
+    <div className="relative bg-ink-100 px-3 py-1.5">
+      <div
+        className="absolute inset-y-0 left-0 bg-brand/[0.07]"
+        style={{ width: `${Math.max(2, ratio * 100)}%` }}
+        aria-hidden
+      />
+      <div className="relative flex items-center justify-between gap-3">
+        <span className="truncate font-mono text-[11px] text-paper" title={event.name}>
+          {event.name}
+        </span>
+        <span className="shrink-0 font-mono text-[11px] tabular-nums text-paper-muted">
+          {formatted}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Auto-format ProfileEvent values based on the name convention used in
+ * ClickHouse: *Microseconds → time, *Bytes → bytes, *Hits/*Misses → counts.
+ */
+function formatProfileEvent(name: string, value: number): string {
+  if (/Microseconds$/.test(name)) {
+    if (value < 1000) return `${value.toLocaleString()} µs`;
+    if (value < 1_000_000) return `${(value / 1000).toFixed(1)} ms`;
+    return `${(value / 1_000_000).toFixed(2)} s`;
+  }
+  if (/Bytes$/.test(name) || /Size$/.test(name)) {
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    if (value < 1024 * 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+  return value.toLocaleString();
 }
 
 interface MemoryCellProps {

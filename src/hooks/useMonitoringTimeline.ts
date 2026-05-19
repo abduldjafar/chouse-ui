@@ -166,6 +166,47 @@ export function usePartLogTimeline(
   });
 }
 
+export interface ProfileEventEntry {
+  name: string;
+  value: number;
+}
+
+/**
+ * Lazy-fetch the ProfileEvents map for a single query. Only invoked when a
+ * row in Monitoring → Logs is expanded — keeps the list fetch slim.
+ */
+export function useQueryProfileEvents(
+  queryId: string | null,
+  options?: Partial<UseQueryOptions<ProfileEventEntry[], Error>>
+) {
+  const { activeConnectionId } = useAuthStore();
+
+  return useQuery({
+    queryKey: ["queryProfileEvents", queryId, activeConnectionId] as const,
+    enabled: !!queryId,
+    queryFn: async () => {
+      const sql = `
+        SELECT ProfileEvents
+        FROM system.query_log
+        WHERE query_id = '${queryId}'
+          AND type IN ('QueryFinish', 'ExceptionWhileProcessing', 'ExceptionBeforeStart')
+          AND event_date >= today() - 2
+        ORDER BY event_time DESC
+        LIMIT 1
+      `;
+      const result = await queryApi.executeQuery(sql);
+      const row = (result.data as Array<{ ProfileEvents?: Record<string, unknown> }>)[0];
+      if (!row?.ProfileEvents) return [];
+      return Object.entries(row.ProfileEvents)
+        .map(([name, value]) => ({ name, value: num(value) }))
+        .filter((e) => e.value > 0)
+        .sort((a, b) => b.value - a.value);
+    },
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+}
+
 /**
  * Total OS RAM reported by ClickHouse, used to flag memory-heavy queries on
  * the Logs page. Cached for 5 min; survives connection changes via the key.
