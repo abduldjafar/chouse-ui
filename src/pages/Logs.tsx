@@ -218,6 +218,37 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
+// Restrained SQL keyword set — the common control/predicate words. Highlight is
+// intentionally limited so the preview stays editorial rather than rainbow.
+const SQL_KEYWORDS =
+  "SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|FULL|CROSS|GROUP\\s+BY|ORDER\\s+BY|HAVING|LIMIT|OFFSET|INSERT|UPDATE|DELETE|INTO|VALUES|SET|WITH|AS|ON|AND|OR|NOT|IN|IS|NULL|BETWEEN|LIKE|ILIKE|DISTINCT|UNION|ALL|EXISTS|CASE|WHEN|THEN|ELSE|END|CREATE|ALTER|DROP|TABLE|INDEX|VIEW|MATERIALIZED|ASC|DESC|FORMAT|SETTINGS|FINAL|PREWHERE|ARRAY\\s+JOIN|GLOBAL|SAMPLE";
+
+const SQL_TOKEN = new RegExp(`(/\\*[\\s\\S]*?\\*/|--[^\\n]*|\\b(?:${SQL_KEYWORDS})\\b)`, "gi");
+
+/**
+ * Light-touch SQL highlight for the query-preview tooltip. Comments dim out
+ * (paper-faint, italic) and keywords pop in brand. Everything else stays paper.
+ * Order matters: comments first to avoid keyword matches inside commented SQL.
+ */
+function highlightSql(sql: string): React.ReactNode[] {
+  const parts = sql.split(SQL_TOKEN);
+  return parts.map((part, i) => {
+    if (i % 2 === 0) return <React.Fragment key={i}>{part}</React.Fragment>;
+    if (part.startsWith("/*") || part.startsWith("--")) {
+      return (
+        <span key={i} className="italic text-paper-faint">
+          {part}
+        </span>
+      );
+    }
+    return (
+      <span key={i} className="text-brand">
+        {part}
+      </span>
+    );
+  });
+}
+
 /**
  * Compact label for the time-range trigger. Drops the 00:00 suffix when both
  * ends sit at midnight (the common "pick days" case) so the chip stays short.
@@ -985,10 +1016,10 @@ function LogRow({ log, isExpanded, onToggle, failed }: LogRowProps) {
               side="bottom"
               align="start"
               sideOffset={6}
-              className="max-w-[640px] rounded-xs border border-ink-500 bg-ink-100 p-0 text-paper shadow-xl"
+              className="max-w-[640px] rounded-xs border border-ink-700 bg-ink-200 p-0 text-paper shadow-2xl ring-1 ring-black/30"
             >
-              <div className="flex items-center justify-between gap-3 border-b border-ink-500 px-3 py-1.5">
-                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-paper-faint">
+              <div className="flex items-center justify-between gap-3 border-b border-ink-500 bg-ink-300 px-3 py-1.5">
+                <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-paper-muted">
                   Query preview
                 </span>
                 <span className="font-mono text-[10px] text-paper-dim">
@@ -996,7 +1027,7 @@ function LogRow({ log, isExpanded, onToggle, failed }: LogRowProps) {
                 </span>
               </div>
               <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap break-words px-3 py-2 font-mono text-[11px] leading-[1.55] text-paper">
-                {log.query}
+                {highlightSql(log.query)}
               </pre>
             </TooltipContent>
           </Tooltip>
