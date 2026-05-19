@@ -916,9 +916,14 @@ interface LogsTableProps {
   clusterMemoryBytes: number;
 }
 
-/** Memory pressure tiers as fraction of total cluster RAM. */
-const MEM_TIER_WARN = 0.4;
-const MEM_TIER_DANGER = 0.6;
+/**
+ * Memory pressure tiers as fraction of total cluster RAM. The 20% warn
+ * threshold is intentionally low — if two or three "fine" queries run at the
+ * same time they can collectively starve the server. Flag early so heavy
+ * queries get rewritten before they coincide.
+ */
+const MEM_TIER_WARN = 0.2;
+const MEM_TIER_DANGER = 0.4;
 
 function memoryTier(usage: number, total: number): "ok" | "warn" | "danger" {
   if (total <= 0 || usage <= 0) return "ok";
