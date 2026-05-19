@@ -45,12 +45,14 @@ import {
   useQueryByTable,
   useQueryPatterns,
   useQueryProfileEvents,
+  useQueryViewsLog,
   type ByTableRow,
   type ByTableSort,
   type HistogramMetric,
   type ProfileEventEntry,
   type QueryPattern,
   type QueryPatternSort,
+  type ViewLogRow,
 } from "@/hooks/useMonitoringTimeline";
 import { QueryHistogramChart } from "@/components/monitoring/QueryHistogramChart";
 import { useRbacStore, RBAC_PERMISSIONS } from "@/stores";
@@ -2048,8 +2050,125 @@ function LogDetail({ log, failed, onClose }: LogDetailProps) {
         <MetaCell label="Event time" value={`${log.event_date} ${log.event_time}`} />
       </div>
 
+      <ViewsTriggeredBlock queryId={log.query_id} />
+
       <ProfileEventsBlock queryId={log.query_id} />
     </div>
+  );
+}
+
+interface ViewsTriggeredBlockProps {
+  queryId: string;
+}
+
+/**
+ * Lazy-loaded panel showing the materialized / normal views that fired as
+ * part of this query — sourced from system.query_views_log. Useful when a
+ * query is slower than expected and the cost is hiding in a downstream MV.
+ */
+function ViewsTriggeredBlock({ queryId }: ViewsTriggeredBlockProps) {
+  const { data: views = [], isLoading, error } = useQueryViewsLog(queryId);
+
+  // Hide the section entirely when no views fired — keeps the expanded
+  // panel quiet for single-table SELECTs where it would never apply.
+  if (!isLoading && !error && views.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
+          Views triggered
+        </span>
+        {!isLoading && views.length > 0 && (
+          <span className="font-mono text-[10px] text-paper-dim">
+            {views.length.toLocaleString()} {views.length === 1 ? "view" : "views"}
+          </span>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="rounded-xs border border-ink-500 bg-ink-200 p-3 font-mono text-[11px] text-paper-faint">
+          Loading triggered views…
+        </div>
+      ) : error ? (
+        <div className="rounded-xs border border-red-900/60 bg-red-950/40 p-3 font-mono text-[11px] text-red-200">
+          Couldn't load views log — {error.message}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xs border border-ink-500">
+          <table className="w-full text-[11px]">
+            <thead className="bg-ink-200">
+              <tr className="border-b border-ink-500">
+                {[
+                  { label: "View", align: "left" },
+                  { label: "Type", align: "left" },
+                  { label: "Status", align: "left" },
+                  { label: "Duration", align: "right" },
+                  { label: "Read rows", align: "right" },
+                  { label: "Written", align: "right" },
+                  { label: "Peak mem", align: "right" },
+                ].map((h) => (
+                  <th
+                    key={h.label}
+                    className={cn(
+                      "px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-paper-faint",
+                      h.align === "right" ? "text-right" : "text-left"
+                    )}
+                  >
+                    {h.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {views.map((v, i) => (
+                <ViewLogTableRow key={`${v.view_name}-${i}`} row={v} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViewLogTableRow({ row }: { row: ViewLogRow }) {
+  const failed =
+    row.status === "ExceptionWhileProcessing" ||
+    row.status === "ExceptionBeforeStart" ||
+    !!row.exception;
+  return (
+    <tr className="border-b border-ink-500/60 last:border-b-0">
+      <td className="px-3 py-1.5 font-mono text-paper">{row.view_name}</td>
+      <td className="px-3 py-1.5 font-mono text-paper-muted">{row.view_type}</td>
+      <td className="px-3 py-1.5">
+        <span
+          className={cn(
+            "rounded-xs border px-1.5 py-px font-mono text-[9px] uppercase tracking-[0.14em]",
+            failed
+              ? "border-red-500/40 text-red-300"
+              : "border-emerald-500/40 text-emerald-300"
+          )}
+          title={row.exception || undefined}
+        >
+          {failed ? "Failed" : row.status === "QueryFinish" ? "OK" : row.status}
+        </span>
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono text-paper">
+        {formatDuration(row.view_duration_ms)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
+        {row.read_rows.toLocaleString()}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
+        {row.written_rows > 0
+          ? `${row.written_rows.toLocaleString()} / ${formatBytes(row.written_bytes)}`
+          : "—"}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
+        {formatBytes(row.peak_memory_usage)}
+      </td>
+    </tr>
   );
 }
 

@@ -261,6 +261,72 @@ export interface ProfileEventEntry {
   value: number;
 }
 
+export interface ViewLogRow {
+  view_name: string;
+  view_type: string;
+  status: string;
+  view_duration_ms: number;
+  read_rows: number;
+  read_bytes: number;
+  written_rows: number;
+  written_bytes: number;
+  peak_memory_usage: number;
+  exception: string;
+}
+
+/**
+ * Materialized / normal views fired as part of a given query. system.
+ * query_views_log is partitioned on event_date and indexed on
+ * initial_query_id, so the lookup is cheap once we know which query we are
+ * drilling into.
+ */
+export function useQueryViewsLog(
+  queryId: string | null,
+  options?: Partial<UseQueryOptions<ViewLogRow[], Error>>
+) {
+  const { activeConnectionId } = useAuthStore();
+
+  return useQuery({
+    queryKey: ["queryViewsLog", queryId, activeConnectionId] as const,
+    enabled: !!queryId,
+    queryFn: async () => {
+      const sql = `
+        SELECT
+          view_name,
+          view_type,
+          status,
+          view_duration_ms,
+          read_rows,
+          read_bytes,
+          written_rows,
+          written_bytes,
+          peak_memory_usage,
+          substring(exception, 1, 2000) AS exception
+        FROM system.query_views_log
+        WHERE initial_query_id = '${queryId}'
+          AND event_date >= today() - 2
+        ORDER BY view_duration_ms DESC
+        LIMIT 200
+      `;
+      const result = await queryApi.executeQuery(sql);
+      return (result.data as Array<Record<string, unknown>>).map((row) => ({
+        view_name: String(row.view_name ?? ""),
+        view_type: String(row.view_type ?? ""),
+        status: String(row.status ?? ""),
+        view_duration_ms: num(row.view_duration_ms),
+        read_rows: num(row.read_rows),
+        read_bytes: num(row.read_bytes),
+        written_rows: num(row.written_rows),
+        written_bytes: num(row.written_bytes),
+        peak_memory_usage: num(row.peak_memory_usage),
+        exception: String(row.exception ?? ""),
+      }));
+    },
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+}
+
 export interface ByTableRow {
   table_qualified: string;
   queries: number;
