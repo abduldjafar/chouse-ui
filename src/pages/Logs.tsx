@@ -917,13 +917,16 @@ interface LogsTableProps {
 }
 
 /**
- * Memory pressure tiers as fraction of total cluster RAM. The 20% warn
- * threshold is intentionally low — if two or three "fine" queries run at the
- * same time they can collectively starve the server. Flag early so heavy
- * queries get rewritten before they coincide.
+ * Memory pressure tiers as fraction of total cluster RAM. ClickHouse's
+ * max_server_memory_usage defaults to 0.9 * OS RAM, and concurrent query
+ * allocations are additive, so the headroom shrinks fast: 4 queries at 25%
+ * each = OOM territory. Background merges + page cache take another slice
+ * off the top, so effective room is closer to 60-70%. The 10% warn / 25%
+ * danger split flags heavy queries preventively, before they coincide with
+ * other heavy queries and force MEMORY_LIMIT_EXCEEDED kills.
  */
-const MEM_TIER_WARN = 0.2;
-const MEM_TIER_DANGER = 0.4;
+const MEM_TIER_WARN = 0.1;
+const MEM_TIER_DANGER = 0.25;
 
 function memoryTier(usage: number, total: number): "ok" | "warn" | "danger" {
   if (total <= 0 || usage <= 0) return "ok";
