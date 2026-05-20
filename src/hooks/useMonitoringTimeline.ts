@@ -793,12 +793,14 @@ export interface BlockedTaskSummary {
   open_mutations: number;        // system.mutations is_done = 0
   sick_replicas: number;         // system.replicas absolute_delay > 60 OR is_readonly
   max_replica_lag_seconds: number;
+  server_memory_used_bytes: number;   // system.asynchronous_metrics MemoryResident
+  server_memory_total_bytes: number;  // system.asynchronous_metrics OSMemoryTotal
 }
 
 /**
- * Roll-up of "this thing is blocked / stuck" signals across the cluster.
- * Single SQL call so it fits a header indicator strip without spawning four
- * separate queries on every poll.
+ * Roll-up of "this thing is blocked / stuck" signals across the cluster +
+ * server-wide memory pressure (resident / total). One SQL call so the
+ * indicator strip stays cheap to poll.
  */
 export function useBlockedTaskSummary(
   options?: Partial<UseQueryOptions<BlockedTaskSummary, Error>>
@@ -814,7 +816,9 @@ export function useBlockedTaskSummary(
           (SELECT count() FROM system.merges WHERE elapsed > 300) AS long_running_merges,
           (SELECT count() FROM system.mutations WHERE is_done = 0) AS open_mutations,
           (SELECT count() FROM system.replicas WHERE absolute_delay > 60 OR is_readonly = 1) AS sick_replicas,
-          (SELECT max(absolute_delay) FROM system.replicas) AS max_replica_lag_seconds
+          (SELECT max(absolute_delay) FROM system.replicas) AS max_replica_lag_seconds,
+          (SELECT value FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) AS server_memory_used_bytes,
+          (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1) AS server_memory_total_bytes
       `;
       const result = await queryApi.executeQuery(sql);
       const row = (result.data as Array<Record<string, unknown>>)[0] ?? {};
@@ -824,6 +828,8 @@ export function useBlockedTaskSummary(
         open_mutations: num(row.open_mutations),
         sick_replicas: num(row.sick_replicas),
         max_replica_lag_seconds: num(row.max_replica_lag_seconds),
+        server_memory_used_bytes: num(row.server_memory_used_bytes),
+        server_memory_total_bytes: num(row.server_memory_total_bytes),
       };
     },
     staleTime: 15_000,

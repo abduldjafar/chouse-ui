@@ -53,6 +53,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import ConfirmationDialog from '@/components/common/ConfirmationDialog';
 import { toast } from 'sonner';
 import { useLiveQueries, useKillQuery, useLiveQueriesStats } from '@/hooks/useLiveQueries';
+import { useBlockedTaskSummary } from '@/hooks/useMonitoringTimeline';
 import { useRbacStore, RBAC_PERMISSIONS } from '@/stores';
 import { cn } from '@/lib/utils';
 import type { LiveQuery } from '@/api/live-queries';
@@ -159,6 +160,68 @@ function StatsCard({ icon: Icon, label, value }: StatsCardProps) {
             <span className="font-mono text-[20px] font-semibold leading-none text-paper">
                 {value}
             </span>
+        </div>
+    );
+}
+
+// ============================================
+// Server memory pressure strip — single-row "used / total · %" with a bar.
+// Tile lights up amber/red as pressure climbs so it's spottable mid-scan.
+// ============================================
+
+function ServerMemoryStrip({
+    used,
+    total,
+    pct,
+}: {
+    used: number;
+    total: number;
+    pct: number;
+}) {
+    const tone = pct >= 90 ? "danger" : pct >= 75 ? "warn" : "normal";
+    const trackTone =
+        tone === "danger"
+            ? "bg-red-500/20"
+            : tone === "warn"
+                ? "bg-amber-500/15"
+                : "bg-ink-300";
+    const fillTone =
+        tone === "danger"
+            ? "bg-red-500"
+            : tone === "warn"
+                ? "bg-amber-500"
+                : "bg-brand";
+    const pctTone =
+        tone === "danger"
+            ? "text-red-700 dark:text-red-300"
+            : tone === "warn"
+                ? "text-amber-700 dark:text-amber-300"
+                : "text-paper";
+
+    return (
+        <div className="flex items-center gap-4 rounded-xs border border-ink-500 bg-ink-100 px-4 py-3">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-muted">
+                <MemoryStick className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            <div className="flex flex-col leading-tight">
+                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+                    Server memory · resident / total
+                </span>
+                <span className="font-mono text-[13px] text-paper">
+                    {formatBytes(used)} <span className="text-paper-faint">/</span> {formatBytes(total)}
+                </span>
+            </div>
+            <div className="ml-auto flex flex-1 items-center gap-3">
+                <div className={cn("h-1.5 flex-1 overflow-hidden rounded-full", trackTone)}>
+                    <div
+                        className={cn("h-full rounded-full transition-all", fillTone)}
+                        style={{ width: `${pct}%` }}
+                    />
+                </div>
+                <span className={cn("w-12 text-right font-mono text-[13px] tabular-nums", pctTone)}>
+                    {pct}%
+                </span>
+            </div>
         </div>
     );
 }
@@ -424,6 +487,12 @@ export default function LiveQueriesTable({
     const { data, isLoading, error, refetch, isFetching } = useLiveQueries(refreshInterval);
     const killQuery = useKillQuery();
     const stats = useLiveQueriesStats(data);
+    const { data: blockedSummary } = useBlockedTaskSummary();
+    const serverMemoryUsed = blockedSummary?.server_memory_used_bytes ?? 0;
+    const serverMemoryTotal = blockedSummary?.server_memory_total_bytes ?? 0;
+    const serverMemoryPct = serverMemoryTotal > 0
+        ? Math.min(100, Math.round((serverMemoryUsed / serverMemoryTotal) * 100))
+        : 0;
 
     // Manual refresh effect
     useEffect(() => {
@@ -516,6 +585,17 @@ export default function LiveQueriesTable({
                             <h2 className="text-[18px] font-semibold tracking-tight text-paper">Live queries</h2>
                         </div>
                     </div>
+                )}
+
+                {/* Server memory pressure — context for the per-query totals
+                    below so you can tell whether 26 GB of queries is half the
+                    box or eating all of it. */}
+                {serverMemoryTotal > 0 && (
+                    <ServerMemoryStrip
+                        used={serverMemoryUsed}
+                        total={serverMemoryTotal}
+                        pct={serverMemoryPct}
+                    />
                 )}
 
                 {/* Stats grid — editorial hairline */}

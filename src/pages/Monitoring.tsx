@@ -104,8 +104,8 @@ function TabPill({ tabKey, isActive, onClick, disabled }: TabPillProps) {
       <Icon className={cn("h-3.5 w-3.5", isActive ? "text-brand" : "text-paper-dim group-hover:text-paper")} aria-hidden />
       <span>{config.label}</span>
       {config.liveBadge && (
-        <span className="inline-flex items-center gap-1 rounded-xs border border-red-900/60 bg-red-950/40 px-1 py-px font-mono text-[8px] uppercase tracking-[0.16em] text-red-300">
-          <span className="h-1 w-1 animate-pulse rounded-full bg-red-400" aria-hidden />
+        <span className="inline-flex items-center gap-1 rounded-xs border border-red-300 bg-red-50 px-1 py-px font-mono text-[8px] uppercase tracking-[0.16em] text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+          <span className="h-1 w-1 animate-pulse rounded-full bg-red-500 dark:bg-red-400" aria-hidden />
           Live
         </span>
       )}
