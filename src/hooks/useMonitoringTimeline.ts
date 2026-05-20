@@ -260,9 +260,11 @@ export interface ByRedashRow {
   redash_query_id: string;        // numeric id pulled from /* … query_id: N … */
   redash_username: string;        // pulled from /* … Username: … */, anyLast
   executions: number;
+  min_duration_ms: number;
   avg_duration_ms: number;
-  total_duration_ms: number;
   max_duration_ms: number;
+  total_duration_ms: number;
+  min_memory: number;
   avg_memory: number;
   max_memory: number;
   total_read_rows: number;
@@ -273,8 +275,10 @@ export interface ByRedashRow {
 export type ByRedashSort =
   | "total_duration_ms"
   | "executions"
+  | "min_duration_ms"
   | "avg_duration_ms"
   | "max_duration_ms"
+  | "min_memory"
   | "max_memory"
   | "total_read_rows"
   | "total_read_bytes";
@@ -316,9 +320,11 @@ export function useQueryByRedashId(
           extract(query, 'query_id:\\\\s*(\\\\d+)') AS redash_query_id,
           anyLast(trim(extract(query, 'Username:\\\\s*([^,]+)'))) AS redash_username,
           count() AS executions,
+          min(query_duration_ms) AS min_duration_ms,
           avg(query_duration_ms) AS avg_duration_ms,
-          sum(query_duration_ms) AS total_duration_ms,
           max(query_duration_ms) AS max_duration_ms,
+          sum(query_duration_ms) AS total_duration_ms,
+          min(memory_usage) AS min_memory,
           avg(memory_usage) AS avg_memory,
           max(memory_usage) AS max_memory,
           sum(read_rows) AS total_read_rows,
@@ -338,9 +344,11 @@ export function useQueryByRedashId(
         redash_query_id: String(row.redash_query_id ?? ""),
         redash_username: String(row.redash_username ?? ""),
         executions: num(row.executions),
+        min_duration_ms: num(row.min_duration_ms),
         avg_duration_ms: num(row.avg_duration_ms),
-        total_duration_ms: num(row.total_duration_ms),
         max_duration_ms: num(row.max_duration_ms),
+        total_duration_ms: num(row.total_duration_ms),
+        min_memory: num(row.min_memory),
         avg_memory: num(row.avg_memory),
         max_memory: num(row.max_memory),
         total_read_rows: num(row.total_read_rows),

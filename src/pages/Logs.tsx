@@ -1902,8 +1902,14 @@ interface ByRedashColumn {
 const BY_REDASH_COLUMNS: ByRedashColumn[] = [
   { key: null, label: "Redash ID · user", align: "left" },
   { key: "executions", label: "Runs", align: "right", w: "w-[80px]" },
+  // Combined "min / avg / max" duration cell — sorts by avg by default,
+  // header is hint-text only. Two extra sort buttons for min and max sit
+  // in the next two narrow columns.
   { key: "avg_duration_ms", label: "Avg dur", align: "right", w: "w-[88px]" },
+  { key: "min_duration_ms", label: "Min dur", align: "right", w: "w-[80px]" },
+  { key: "max_duration_ms", label: "Max dur", align: "right", w: "w-[88px]" },
   { key: "total_duration_ms", label: "Total dur", align: "right", w: "w-[100px]" },
+  { key: "min_memory", label: "Min mem", align: "right", w: "w-[80px]" },
   { key: "max_memory", label: "Max mem", align: "right", w: "w-[92px]" },
   { key: "total_read_rows", label: "Read rows", align: "right", w: "w-[112px]" },
   { key: "total_read_bytes", label: "Read bytes", align: "right", w: "w-[108px]" },
@@ -1985,6 +1991,10 @@ function ByRedashTableRow({
   const memRatioPct =
     clusterMemoryBytes > 0 ? (row.max_memory / clusterMemoryBytes) * 100 : 0;
 
+  const minMemTier = memoryTier(row.min_memory, clusterMemoryBytes);
+  const minMemRatioPct =
+    clusterMemoryBytes > 0 ? (row.min_memory / clusterMemoryBytes) * 100 : 0;
+
   return (
     <tr className="border-b border-ink-500/60 transition-colors hover:bg-ink-200/60">
       <td className="px-3 py-1.5 font-mono">
@@ -1999,11 +2009,24 @@ function ByRedashTableRow({
       <td className="px-3 py-1.5 text-right font-mono tabular-nums text-paper">
         {row.executions.toLocaleString()}
       </td>
-      <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
+      <td className="px-3 py-1.5 text-right font-mono text-paper">
         {formatDuration(row.avg_duration_ms)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
+        {formatDuration(row.min_duration_ms)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
+        {formatDuration(row.max_duration_ms)}
       </td>
       <td className="px-3 py-1.5 text-right font-mono text-paper">
         {formatDuration(row.total_duration_ms)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono">
+        <MemoryCell
+          bytes={row.min_memory}
+          tier={minMemTier}
+          ratioPct={minMemRatioPct}
+        />
       </td>
       <td className="px-3 py-1.5 text-right font-mono">
         <MemoryCell
