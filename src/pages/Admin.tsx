@@ -87,7 +87,7 @@ function TabCard({ tabKey, isActive, onClick, disabled }: TabCardProps) {
       disabled={disabled}
       aria-pressed={isActive}
       className={cn(
-        "group @container relative flex flex-1 min-w-[160px] items-start gap-3 border border-ink-500 px-4 py-3 text-left transition-colors",
+        "group @container relative flex flex-1 min-w-[160px] items-center gap-3 border border-ink-500 px-4 py-3 text-left transition-colors",
         "rounded-xs",
         isActive
           ? "border-ink-700 bg-ink-200 text-paper"
