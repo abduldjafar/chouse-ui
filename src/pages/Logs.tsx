@@ -333,7 +333,6 @@ export default function LogsPage({
   const [timeRangeHours, setTimeRangeHours] = useState<number>(6);
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date } | null>(null);
   const [rangePopoverOpen, setRangePopoverOpen] = useState(false);
-  const [pickMode, setPickMode] = useState<"range" | "single">("range");
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("event_time");
@@ -833,35 +832,11 @@ export default function LogsPage({
 
                   {/* Calendar column */}
                   <div className="flex w-[300px] flex-col">
-                    {/* Mode toggle — Range vs Single day */}
-                    <div className="m-3 mb-0 flex items-center gap-1 self-start rounded-xs border border-ink-500 bg-ink-200 p-0.5">
-                      {(["range", "single"] as const).map((m) => {
-                        const active = pickMode === m;
-                        return (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => setPickMode(m)}
-                            className={cn(
-                              "rounded-xs px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors",
-                              active
-                                ? "bg-brand text-ink-50"
-                                : "text-paper-muted hover:bg-ink-300 hover:text-paper"
-                            )}
-                          >
-                            {m === "range" ? "Range" : "Single day"}
-                          </button>
-                        );
-                      })}
-                    </div>
-
                     <RangePickerDrilldown
-                      mode={pickMode}
                       range={customRange}
                       onChange={(r) =>
                         setCustomRange(r ? { from: r.from, to: r.to } : null)
                       }
-                      onSingleDayApply={() => setRangePopoverOpen(false)}
                     />
 
                     <div className="flex items-center justify-between gap-3 border-t border-ink-500 px-3 py-3">
@@ -875,31 +850,26 @@ export default function LogsPage({
                       >
                         Clear
                       </button>
-                      {pickMode === "range" ? (
-                        <button
-                          type="button"
-                          disabled={!customRange?.from}
-                          onClick={() => {
-                            if (!customRange?.from) return;
-                            // Normalise: if user picked a single day (from = to)
-                            // or didn't pick a `to`, span the full day —
-                            // from = 00:00:00, to = 23:59:59.999. Otherwise
-                            // pin from to start of its day and to to end of
-                            // its day so multi-day windows always cover full
-                            // calendar days.
-                            const from = new Date(customRange.from);
-                            from.setHours(0, 0, 0, 0);
-                            const toBase = customRange.to ?? customRange.from;
-                            const to = new Date(toBase);
-                            to.setHours(23, 59, 59, 999);
-                            setCustomRange({ from, to });
-                            setRangePopoverOpen(false);
-                          }}
-                          className="rounded-xs bg-brand px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-50 hover:bg-brand-soft disabled:opacity-40"
-                        >
-                          Apply range
-                        </button>
-                      ) : null}
+                      <button
+                        type="button"
+                        disabled={!customRange?.from}
+                        onClick={() => {
+                          if (!customRange?.from) return;
+                          // Normalise: pick one day → span the full day
+                          // (00:00:00 → 23:59:59.999). Pick a range → from
+                          // snaps to start of its day, to to end of its day.
+                          const from = new Date(customRange.from);
+                          from.setHours(0, 0, 0, 0);
+                          const toBase = customRange.to ?? customRange.from;
+                          const to = new Date(toBase);
+                          to.setHours(23, 59, 59, 999);
+                          setCustomRange({ from, to });
+                          setRangePopoverOpen(false);
+                        }}
+                        className="rounded-xs bg-brand px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-50 hover:bg-brand-soft disabled:opacity-40"
+                      >
+                        Apply
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -1,23 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
-export type PickerMode = "range" | "single";
-
 type DrillView = "days" | "months" | "years";
 
 interface RangePickerDrilldownProps {
-  mode: PickerMode;
   range: { from?: Date; to?: Date } | null;
-  /** Fired on every selection change. Single-day mode reports both ends on
-   * the second click; range mode reports whatever the calendar produced. */
+  /** Fired on every selection change. The parent owns the normalisation
+   * (full-day snapping) that runs when Apply is clicked. */
   onChange: (range: { from?: Date; to?: Date } | null) => void;
-  /** Fired when single-day picker double-clicks (or completes second click)
-   * so the parent can auto-close the popover and apply. */
-  onSingleDayApply?: (range: { from: Date; to: Date }) => void;
   /** Year range for the year-grid view. */
   fromYear?: number;
   toYear?: number;
@@ -38,28 +32,9 @@ const MONTH_LABELS = [
   "Dec",
 ];
 
-function dayBounds(d: Date): { from: Date; to: Date } {
-  const from = new Date(d);
-  from.setHours(0, 0, 0, 0);
-  const to = new Date(d);
-  to.setHours(23, 59, 59, 999);
-  return { from, to };
-}
-
-function sameDay(a: Date | undefined, b: Date | undefined): boolean {
-  if (!a || !b) return false;
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
 export function RangePickerDrilldown({
-  mode,
   range,
   onChange,
-  onSingleDayApply,
   fromYear = 2015,
   toYear = new Date().getFullYear() + 1,
 }: RangePickerDrilldownProps) {
@@ -67,45 +42,10 @@ export function RangePickerDrilldown({
   const [displayedMonth, setDisplayedMonth] = useState<Date>(
     () => range?.from ?? new Date()
   );
-  // Year-grid view scrolls in chunks of 12; pin the chunk so flipping back
-  // and forth feels stable.
   const [yearChunkStart, setYearChunkStart] = useState<number>(() => {
     const cur = (range?.from ?? new Date()).getFullYear();
     return Math.floor(cur / 12) * 12;
   });
-  // Single-day staging: first click highlights, second click on the same
-  // day commits. Clicking a different day resets the staging.
-  const [singleStaged, setSingleStaged] = useState<Date | null>(null);
-
-  // Reset staging if the parent changes mode under us.
-  useEffect(() => {
-    setSingleStaged(null);
-  }, [mode]);
-
-  const handleDayPick = (d: Date | undefined): void => {
-    if (mode !== "single") return;
-    // d === undefined means DayPicker fired its default deselect on the
-    // second click of the same day — treat that as the commit.
-    if (!d) {
-      if (singleStaged) {
-        const { from, to } = dayBounds(singleStaged);
-        onChange({ from, to });
-        onSingleDayApply?.({ from, to });
-        setSingleStaged(null);
-      }
-      return;
-    }
-    if (singleStaged && sameDay(singleStaged, d)) {
-      const { from, to } = dayBounds(d);
-      onChange({ from, to });
-      onSingleDayApply?.({ from, to });
-      setSingleStaged(null);
-      return;
-    }
-    // First click on a new day — stage it, wait for confirm click.
-    setSingleStaged(d);
-    onChange({ from: d, to: undefined });
-  };
 
   const currentYear = displayedMonth.getFullYear();
   const currentMonthIdx = displayedMonth.getMonth();
@@ -117,9 +57,7 @@ export function RangePickerDrilldown({
         <NavButton
           onClick={() => {
             if (view === "days") {
-              setDisplayedMonth(
-                new Date(currentYear, currentMonthIdx - 1, 1)
-              );
+              setDisplayedMonth(new Date(currentYear, currentMonthIdx - 1, 1));
             } else if (view === "months") {
               setDisplayedMonth(new Date(currentYear - 1, currentMonthIdx, 1));
             } else {
@@ -152,9 +90,7 @@ export function RangePickerDrilldown({
         <NavButton
           onClick={() => {
             if (view === "days") {
-              setDisplayedMonth(
-                new Date(currentYear, currentMonthIdx + 1, 1)
-              );
+              setDisplayedMonth(new Date(currentYear, currentMonthIdx + 1, 1));
             } else if (view === "months") {
               setDisplayedMonth(new Date(currentYear + 1, currentMonthIdx, 1));
             } else {
@@ -169,14 +105,15 @@ export function RangePickerDrilldown({
 
       {/* Body — switches per drill view */}
       {view === "days" && (
-        <DayPickerSwitcher
-          mode={mode}
-          range={range}
-          singleStaged={singleStaged}
-          displayedMonth={displayedMonth}
+        <DayPicker
+          mode="range"
+          selected={{ from: range?.from, to: range?.to }}
+          onSelect={(r) => onChange(r ? { from: r.from, to: r.to } : null)}
+          month={displayedMonth}
           onMonthChange={setDisplayedMonth}
-          onRangePick={(r) => onChange({ from: r?.from, to: r?.to })}
-          onSinglePick={handleDayPick}
+          showOutsideDays
+          hideNavigation
+          classNames={SHARED_CLASSNAMES}
         />
       )}
 
@@ -206,37 +143,31 @@ export function RangePickerDrilldown({
         </div>
       )}
 
-      {view === "years" && <YearGrid
-        start={yearChunkStart}
-        currentYear={currentYear}
-        fromYear={fromYear}
-        toYear={toYear}
-        onPick={(y) => {
-          setDisplayedMonth(new Date(y, currentMonthIdx, 1));
-          setView("months");
-        }}
-      />}
+      {view === "years" && (
+        <YearGrid
+          start={yearChunkStart}
+          currentYear={currentYear}
+          fromYear={fromYear}
+          toYear={toYear}
+          onPick={(y) => {
+            setDisplayedMonth(new Date(y, currentMonthIdx, 1));
+            setView("months");
+          }}
+        />
+      )}
 
-      {/* Footer hint */}
-      {mode === "single" && view === "days" && (
+      {/* Footer hint — only show on days view */}
+      {view === "days" && (
         <p className="border-t border-ink-500 pt-2 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
-          {singleStaged
-            ? "Click the same day again to apply for the full 24h."
-            : "Click a day, then click it again to apply for the full 24h."}
+          {range?.from && !range?.to
+            ? "Click another day to set the end. Same day = full 24h."
+            : range?.from && range?.to
+              ? "Range set. Click Apply to load."
+              : "Click a day. Same day again = full 24h."}
         </p>
       )}
     </div>
   );
-}
-
-interface SwitcherProps {
-  mode: PickerMode;
-  range: { from?: Date; to?: Date } | null;
-  singleStaged: Date | null;
-  displayedMonth: Date;
-  onMonthChange: (d: Date) => void;
-  onRangePick: (r: { from?: Date; to?: Date } | undefined) => void;
-  onSinglePick: (d: Date | undefined) => void;
 }
 
 const SHARED_CLASSNAMES = {
@@ -263,52 +194,6 @@ const SHARED_CLASSNAMES = {
   range_end: "bg-brand text-ink-50 hover:bg-brand-soft rounded-r-xs",
   hidden: "invisible",
 };
-
-/**
- * Type-narrows the DayPicker mode prop so TS resolves the `selected`/`onSelect`
- * union correctly. react-day-picker's discriminated union requires separate
- * <DayPicker mode="range" /> vs <DayPicker mode="single" /> call sites.
- */
-function DayPickerSwitcher({
-  mode,
-  range,
-  singleStaged,
-  displayedMonth,
-  onMonthChange,
-  onRangePick,
-  onSinglePick,
-}: SwitcherProps) {
-  if (mode === "range") {
-    return (
-      <DayPicker
-        mode="range"
-        selected={{ from: range?.from, to: range?.to }}
-        onSelect={onRangePick}
-        month={displayedMonth}
-        onMonthChange={onMonthChange}
-        showOutsideDays
-        hideNavigation
-        classNames={SHARED_CLASSNAMES}
-      />
-    );
-  }
-  return (
-    <DayPicker
-      mode="single"
-      selected={singleStaged ?? range?.from}
-      // onSelect fires with a Date on first click and with undefined on
-      // second click of the same day (default deselect behaviour). Pass it
-      // through — the consumer treats undefined as a confirm when a
-      // selection is already staged.
-      onSelect={onSinglePick}
-      month={displayedMonth}
-      onMonthChange={onMonthChange}
-      showOutsideDays
-      hideNavigation
-      classNames={SHARED_CLASSNAMES}
-    />
-  );
-}
 
 function NavButton({
   children,
