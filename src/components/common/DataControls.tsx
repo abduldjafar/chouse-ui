@@ -42,20 +42,25 @@ export function DataControls({
                 </span>
             )}
 
-            {showTimeRange && onTimeRangeChange && (
-                <Select value={timeRange} onValueChange={onTimeRangeChange}>
-                    <SelectTrigger className="w-[150px] bg-ink-200 border-ink-500 h-9 text-paper">
-                        <Clock className="h-4 w-4 mr-2 text-paper-muted" />
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="15m">15 minutes</SelectItem>
-                        <SelectItem value="1h">1 hour</SelectItem>
-                        <SelectItem value="6h">6 hours</SelectItem>
-                        <SelectItem value="24h">24 hours</SelectItem>
-                    </SelectContent>
-                </Select>
-            )}
+            {/* Reserve the time-range slot regardless of showTimeRange so the
+                surrounding header layout stays stable when switching tabs.
+                Visibility is the only thing that toggles. */}
+            <div className="w-[120px] shrink-0">
+                {showTimeRange && onTimeRangeChange && (
+                    <Select value={timeRange} onValueChange={onTimeRangeChange}>
+                        <SelectTrigger className="w-full bg-ink-200 border-ink-500 h-8 text-paper font-mono text-[11px]">
+                            <Clock className="h-3.5 w-3.5 mr-2 text-paper-muted" />
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="15m">15 minutes</SelectItem>
+                            <SelectItem value="1h">1 hour</SelectItem>
+                            <SelectItem value="6h">6 hours</SelectItem>
+                            <SelectItem value="24h">24 hours</SelectItem>
+                        </SelectContent>
+                    </Select>
+                )}
+            </div>
 
             <div className="flex items-center p-1 gap-1 bg-ink-200 rounded-xs border border-ink-500">
                 <Button
