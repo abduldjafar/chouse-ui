@@ -878,14 +878,21 @@ export default function LogsPage({
                       {pickMode === "range" ? (
                         <button
                           type="button"
-                          disabled={!customRange?.from || !customRange?.to}
+                          disabled={!customRange?.from}
                           onClick={() => {
-                            if (customRange?.from && !customRange.to) {
-                              setCustomRange({
-                                from: customRange.from,
-                                to: customRange.from,
-                              });
-                            }
+                            if (!customRange?.from) return;
+                            // Normalise: if user picked a single day (from = to)
+                            // or didn't pick a `to`, span the full day —
+                            // from = 00:00:00, to = 23:59:59.999. Otherwise
+                            // pin from to start of its day and to to end of
+                            // its day so multi-day windows always cover full
+                            // calendar days.
+                            const from = new Date(customRange.from);
+                            from.setHours(0, 0, 0, 0);
+                            const toBase = customRange.to ?? customRange.from;
+                            const to = new Date(toBase);
+                            to.setHours(23, 59, 59, 999);
+                            setCustomRange({ from, to });
                             setRangePopoverOpen(false);
                           }}
                           className="rounded-xs bg-brand px-3 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-50 hover:bg-brand-soft disabled:opacity-40"
