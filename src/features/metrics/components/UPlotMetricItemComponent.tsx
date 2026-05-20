@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import uPlot from "uplot";
 import { formatBytes, formatCompactNumber } from "@/lib/utils";
+import { useTheme } from "@/components/common/theme-provider";
 
 interface MetricData {
   timestamps: number[];
@@ -29,6 +30,25 @@ const UPlotMetricItemComponent: React.FC<UPlotMetricItemComponentProps> = ({
   const chartRef = useRef<HTMLDivElement>(null);
   const uplotRef = useRef<uPlot | null>(null);
   const [hoveredValues, setHoveredValues] = useState<{ time: string; values: { label: string; value: string; color: string }[] } | null>(null);
+  const { resolvedTheme } = useTheme();
+
+  // uPlot draws onto a canvas with no CSS hooks, so we feed it an axis palette
+  // keyed off resolvedTheme. The dark side keeps the existing white/X rgba
+  // values; the light side uses dark-on-warm-stone equivalents so labels stay
+  // readable on the new paper background.
+  const axisPalette = resolvedTheme === "light"
+    ? {
+        stroke: "rgba(28, 25, 23, 0.55)",   // stone-900-ish for tick labels
+        grid: "rgba(28, 25, 23, 0.08)",     // hairline gridlines
+        ticks: "rgba(28, 25, 23, 0.20)",    // tick marks
+        cursorPoint: "rgba(28, 25, 23, 0.85)",
+      }
+    : {
+        stroke: "rgba(255, 255, 255, 0.3)",
+        grid: "rgba(255, 255, 255, 0.05)",
+        ticks: "rgba(255, 255, 255, 0.1)",
+        cursorPoint: "#fff",
+      };
 
   // Helper to format values based on title/unit
   const formatValue = (val: number) => {
@@ -93,7 +113,7 @@ const UPlotMetricItemComponent: React.FC<UPlotMetricItemComponentProps> = ({
           show: true,
           size: 8,
           // fill: color, // Removed global fill
-          stroke: "#fff",
+          stroke: axisPalette.cursorPoint,
           width: 2,
         },
         drag: {
@@ -132,13 +152,13 @@ const UPlotMetricItemComponent: React.FC<UPlotMetricItemComponentProps> = ({
       },
       axes: [
         {
-          stroke: "rgba(255,255,255,0.3)",
+          stroke: axisPalette.stroke,
           grid: {
-            stroke: "rgba(255,255,255,0.05)",
+            stroke: axisPalette.grid,
             width: 1,
           },
           ticks: {
-            stroke: "rgba(255,255,255,0.1)",
+            stroke: axisPalette.ticks,
             width: 1,
             size: 5,
           },
@@ -150,13 +170,13 @@ const UPlotMetricItemComponent: React.FC<UPlotMetricItemComponentProps> = ({
           }),
         },
         {
-          stroke: "rgba(255,255,255,0.3)",
+          stroke: axisPalette.stroke,
           grid: {
-            stroke: "rgba(255,255,255,0.05)",
+            stroke: axisPalette.grid,
             width: 1,
           },
           ticks: {
-            stroke: "rgba(255,255,255,0.1)",
+            stroke: axisPalette.ticks,
             width: 1,
             size: 5,
           },
@@ -215,7 +235,7 @@ const UPlotMetricItemComponent: React.FC<UPlotMetricItemComponentProps> = ({
         uplotRef.current.destroy();
       }
     };
-  }, [data, title, colors, fill, height]);
+  }, [data, title, colors, fill, height, resolvedTheme]);
 
   if (!data.timestamps.length) {
     return (
