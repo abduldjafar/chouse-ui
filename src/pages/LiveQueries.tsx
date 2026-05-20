@@ -54,7 +54,6 @@ import ConfirmationDialog from '@/components/common/ConfirmationDialog';
 import { toast } from 'sonner';
 import { useLiveQueries, useKillQuery, useLiveQueriesStats } from '@/hooks/useLiveQueries';
 import { useBlockedTaskSummary } from '@/hooks/useMonitoringTimeline';
-import { ServerMemoryBreakdown } from '@/components/monitoring/ServerMemoryBreakdown';
 import { useRbacStore, RBAC_PERMISSIONS } from '@/stores';
 import { cn } from '@/lib/utils';
 import type { LiveQuery } from '@/api/live-queries';
@@ -590,7 +589,9 @@ export default function LiveQueriesTable({
 
                 {/* Server memory pressure — context for the per-query totals
                     below so you can tell whether 26 GB of queries is half the
-                    box or eating all of it. */}
+                    box or eating all of it. Detailed breakdown lives on
+                    Metrics → System (this page stays focused on per-query
+                    state). */}
                 {serverMemoryTotal > 0 && (
                     <ServerMemoryStrip
                         used={serverMemoryUsed}
@@ -598,9 +599,6 @@ export default function LiveQueriesTable({
                         pct={serverMemoryPct}
                     />
                 )}
-
-                {/* Detailed breakdown — what's eating the RSS */}
-                <ServerMemoryBreakdown />
 
                 {/* Stats grid — editorial hairline */}
                 <div className="grid grid-cols-2 border-l border-t border-ink-500 md:grid-cols-4">

@@ -51,6 +51,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import UPlotMetricItemComponent from "@/features/metrics/components/UPlotMetricItemComponent";
+import { ServerMemoryBreakdown } from "@/components/monitoring/ServerMemoryBreakdown";
 import { useMetrics, useProductionMetrics } from "@/hooks";
 import { cn, formatBytes as formatBytesUtil, formatCompactNumber, formatNumber } from "@/lib/utils";
 import { useRbacStore, RBAC_PERMISSIONS } from "@/stores";
@@ -2157,37 +2158,39 @@ export default function Metrics({
                 </motion.div>
 
 
-                {/* SECTION 3: MEMORY ANALYSIS */}
+                {/* SECTION 3: MEMORY BREAKDOWN — what server RAM is being
+                    used for right now. Replaces the old Memory Analysis
+                    section that overlaid OS RSS with MemoryTracking on the
+                    same axis, which gave nonsense like "657 GB tracked" next
+                    to a 63 GB RSS without indicating one was real and the
+                    other was an internal allocator counter. */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3 }}
-                  className="rounded-md border border-ink-500 bg-ink-100 p-6"
                 >
-                  <div className="flex items-center gap-3 mb-6">
-                    <span className="grid h-9 w-9 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-muted">
-                      <MemoryStick className="h-4 w-4" aria-hidden />
-                    </span>
-                    <div className="flex flex-col gap-0.5">
-                      <h3 className="text-[14px] font-semibold tracking-tight text-paper">Memory Analysis</h3>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Detailed memory usage, caches, and allocators</p>
+                  <ServerMemoryBreakdown />
+                </motion.div>
+
+                {/* Allocator history (jemalloc) — keep the time-series view
+                    for users who want to watch the allocator over the window. */}
+                {allocatorMemoryData && allocatorMemoryData.values.some(v => v.some(n => n > 0)) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.35 }}
+                    className="rounded-md border border-ink-500 bg-ink-100 p-6"
+                  >
+                    <div className="flex items-center gap-3 mb-6">
+                      <span className="grid h-9 w-9 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-muted">
+                        <Database className="h-4 w-4" aria-hidden />
+                      </span>
+                      <div className="flex flex-col gap-0.5">
+                        <h3 className="text-[14px] font-semibold tracking-tight text-paper">Allocator history</h3>
+                        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">jemalloc allocated / resident over time</p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="grid gap-6 lg:grid-cols-2 mb-6">
-                    {/* Detailed Memory Breakdown */}
-                    <MetricChartCard
-                      title="Detailed Memory Breakdown"
-                      subtitle="Memory usage by component (resident and virtual)"
-                      icon={MemoryStick}
-                      color="purple"
-                      data={memoryBreakdownData}
-                      isLoading={prodLoading}
-                      chartTitle="Bytes"
-                      hideLatestValues
-                    />
-
-                    {/* Allocator Memory */}
                     <MetricChartCard
                       title="Allocator Memory (jemalloc)"
                       subtitle="Memory usage by jemalloc allocator"
@@ -2198,29 +2201,8 @@ export default function Metrics({
                       chartTitle="Bytes"
                       hideLatestValues
                     />
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-3 border-l border-t border-ink-500">
-                    <StatCard
-                      title="Memory Cache"
-                      value={formatBytes(memoryBreakdownData?.values[2]?.slice(-1)[0] || 0)}
-                      icon={Zap}
-                      isLoading={prodLoading}
-                    />
-                    <StatCard
-                      title="Jemalloc Allocated"
-                      value={formatBytes(allocatorMemoryData?.values[0]?.slice(-1)[0] || 0)}
-                      icon={Database}
-                      isLoading={prodLoading}
-                    />
-                    <StatCard
-                      title="Jemalloc Resident"
-                      value={formatBytes(allocatorMemoryData?.values[1]?.slice(-1)[0] || 0)}
-                      icon={HardDrive}
-                      isLoading={prodLoading}
-                    />
-                  </div>
-                </motion.div>
+                  </motion.div>
+                )}
 
                 {/* SECTION 4: LOAD AVERAGE & ZOOKEEPER */}
                 <motion.div
