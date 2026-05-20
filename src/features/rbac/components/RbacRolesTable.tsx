@@ -358,10 +358,10 @@ export const RbacRolesTable: React.FC<RbacRolesTableProps> = ({
                         transition={{ duration: 0.3 }}
                         className="px-5 pb-5 pt-0"
                       >
-                        <div className="p-5 rounded-xl bg-gradient-to-br from-black/40 to-black/20 border border-white/10 backdrop-blur-sm space-y-4">
+                        <div className="p-5 rounded-xs bg-ink-200 border border-ink-500 space-y-4">
                           <div className="flex items-center gap-2">
-                            <Sparkles className="h-4 w-4 text-purple-400" />
-                            <h4 className="text-sm font-semibold text-white">Permissions</h4>
+                            <Sparkles className="h-4 w-4 text-violet-600 dark:text-purple-400" />
+                            <h4 className="text-sm font-semibold text-paper">Permissions</h4>
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {Object.entries(groupedPermissions).map(([category, perms]) => (
@@ -370,7 +370,7 @@ export const RbacRolesTable: React.FC<RbacRolesTableProps> = ({
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.1 }}
-                                className="space-y-2 p-3 rounded-lg bg-white/5 border border-white/10"
+                                className="space-y-2 p-3 rounded-xs bg-ink-100 border border-ink-500"
                               >
                                 <h5 className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-paper-faint">
                                   {category}

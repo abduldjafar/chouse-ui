@@ -261,7 +261,7 @@ const MetricChartCard: React.FC<MetricChartCardProps> = ({
           />
         ) : (
           <div className="flex items-center justify-center h-full">
-            <div className="flex flex-col items-center gap-3 text-gray-500">
+            <div className="flex flex-col items-center gap-3 text-paper-faint">
               <BarChart3 className="h-10 w-10 text-paper-dim" aria-hidden />
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">No data available</span>
             </div>

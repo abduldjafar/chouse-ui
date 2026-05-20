@@ -465,7 +465,7 @@ const DatabaseExplorer: React.FC = () => {
               {/* Search & Actions Bar */}
               <div className="flex items-center gap-2 mb-2">
                 <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-paper-faint" />
                   <Input
                     ref={searchInputRef}
                     type="text"
@@ -810,7 +810,7 @@ const DatabaseExplorer: React.FC = () => {
               {/* Search & Refresh */}
               <div className="flex items-center gap-2 mb-2">
                 <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-paper-faint" />
                   <Input
                     type="text"
                     placeholder="Search saved queries..."

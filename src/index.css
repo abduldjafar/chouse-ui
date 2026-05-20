@@ -224,76 +224,89 @@
   margin-bottom: 20px;
 }
 
-/* AgGrid Custom Styling - Ethereal & Clean Redesign */
+/*
+ * AgGrid Custom Styling — shared baseline + theme-scoped colour rules.
+ * Dimensions (font-size, row height, font family) apply to both themes;
+ * colour values are split between .dark (white-tinted glassy chrome) and
+ * the light fallback (warm-stone, opaque) so neither side reads as broken.
+ */
 .ag-theme-balham-dark,
 .ag-theme-balham {
   --ag-font-size: 12px;
   --ag-header-height: 32px;
   --ag-row-height: 28px;
   --ag-selected-row-background-color: transparent;
+}
+
+.ag-header-cell-label,
+.ag-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.ag-header-cell-label {
+  font-weight: 500 !important;
+  font-size: 13px;
+  text-transform: lowercase;
+}
+.ag-row {
+  transition: background-color 0.3s ease;
+}
+
+/* Dark-mode colour rules — keep the glassy, white-tinted chrome on ink. */
+.dark .ag-theme-balham-dark,
+.dark .ag-theme-balham {
   --ag-row-hover-color: rgba(255, 255, 255, 0.02);
   --ag-header-background-color: transparent;
   --ag-border-color: rgba(255, 255, 255, 0.04);
 }
-
-/* Ethereal Headers */
-.ag-header {
+.dark .ag-header {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   background-color: transparent !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
-
-.ag-header-cell-label {
-  font-weight: 500 !important;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
+.dark .ag-header-cell-label {
   color: rgba(255, 255, 255, 0.85);
-  text-transform: lowercase;
   text-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
 }
-
-/* Micro-Transitions */
-.ag-row {
-  transition: background-color 0.3s ease;
-}
-
-.ag-cell {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+.dark .ag-cell {
   border-right: 1px solid rgba(255, 255, 255, 0.02) !important;
 }
 
-/* Softened Syntax Highlighting - No Glows */
-.cell-string {
-  color: rgba(206, 145, 120, 0.9) !important;
-  /* Soft Terracotta */
+/* Light-mode colour rules — opaque warm-stone, no glass blur. */
+:root:not(.dark) .ag-theme-balham-dark,
+:root:not(.dark) .ag-theme-balham {
+  --ag-row-hover-color: rgba(0, 0, 0, 0.025);
+  --ag-header-background-color: var(--ink-200);
+  --ag-border-color: var(--ink-300);
+}
+:root:not(.dark) .ag-header {
+  background-color: var(--ink-200) !important;
+  border-bottom: 1px solid var(--ink-500) !important;
+}
+:root:not(.dark) .ag-header-cell-label {
+  color: var(--paper-muted);
+}
+:root:not(.dark) .ag-cell {
+  border-right: 1px solid var(--ink-300) !important;
 }
 
-.cell-number {
-  color: rgba(181, 206, 168, 0.9) !important;
-  /* Soft Sage */
-}
+/* Cell value tints — dark mode = soft terracotta/sage/sky on near-black,
+ * light mode = same hues shifted darker for AA contrast on warm white. */
+.dark .cell-string { color: rgba(206, 145, 120, 0.9) !important; }
+.dark .cell-number { color: rgba(181, 206, 168, 0.9) !important; }
+.dark .cell-boolean { color: rgba(86, 156, 214, 0.9) !important; }
+.dark .cell-date { color: rgba(156, 220, 254, 0.8) !important; }
+.dark .cell-null { color: rgba(255, 255, 255, 0.15) !important; }
+.dark .cell-object-preview { color: rgba(156, 220, 254, 0.4) !important; font-size: 11px; }
 
-.cell-boolean {
-  color: rgba(86, 156, 214, 0.9) !important;
-  /* Soft Blue */
-}
+:root:not(.dark) .cell-string { color: #a8512a !important; }
+:root:not(.dark) .cell-number { color: #3f6212 !important; }
+:root:not(.dark) .cell-boolean { color: #1d4ed8 !important; }
+:root:not(.dark) .cell-date { color: #0369a1 !important; }
+:root:not(.dark) .cell-null { color: var(--paper-faint) !important; }
+:root:not(.dark) .cell-object-preview { color: var(--paper-dim) !important; font-size: 11px; }
 
-.cell-date {
-  color: rgba(156, 220, 254, 0.8) !important;
-  /* Soft Sky Blue */
-}
-
-.cell-null {
-  color: rgba(255, 255, 255, 0.15) !important;
-}
-
-.cell-object-preview {
-  color: rgba(156, 220, 254, 0.4) !important;
-  font-size: 11px;
-}
-
-/* Colored Type Badges - High Visibility & Luminous */
+/* Type badges — same shape, theme-tinted bg/border. */
 .cell-type-badge {
   font-size: 8px;
   opacity: 0.6;
@@ -303,11 +316,15 @@
   transition: all 0.3s ease;
   padding: 1px 5px;
   border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.08);
-  /* Brighter background */
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  /* Luminous border */
   text-transform: lowercase;
+}
+.dark .cell-type-badge {
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+:root:not(.dark) .cell-type-badge {
+  background-color: var(--ink-200);
+  border: 1px solid var(--ink-500);
 }
 
 /* Vibrant Luminous colors */

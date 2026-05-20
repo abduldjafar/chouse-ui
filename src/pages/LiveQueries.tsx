@@ -197,25 +197,25 @@ function QueryRow({ query, onKill, canKill, isKilling }: QueryRowProps) {
                                             e.stopPropagation();
                                             copyQueryId();
                                         }}
-                                        className="p-1 hover:bg-white/10 rounded transition-colors"
+                                        className="p-1 hover:bg-ink-300 rounded transition-colors"
                                     >
                                         {copied ? (
-                                            <Check className="w-3 h-3 text-green-400" />
+                                            <Check className="w-3 h-3 text-emerald-500" />
                                         ) : (
-                                            <Copy className="w-3 h-3 text-gray-500" />
+                                            <Copy className="w-3 h-3 text-paper-faint" />
                                         )}
                                     </button>
                                 </TooltipTrigger>
                                 <TooltipContent>Copy Query ID</TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
-                        <span className="text-gray-300">{query.query_id.slice(0, 8)}...</span>
+                        <span className="text-paper-muted">{query.query_id.slice(0, 8)}...</span>
                     </div>
                 </TableCell>
                 <TableCell>
                     <div className="flex items-center gap-2">
-                        <User className="w-3.5 h-3.5 text-gray-500" />
-                        <span className="text-gray-300">
+                        <User className="w-3.5 h-3.5 text-paper-faint" />
+                        <span className="text-paper-muted">
                             {query.rbac_user_display_name || query.rbac_user || query.user}
                         </span>
                     </div>
@@ -223,11 +223,11 @@ function QueryRow({ query, onKill, canKill, isKilling }: QueryRowProps) {
                 <TableCell className="max-w-[300px]">
                     <div className="flex items-center gap-2">
                         {isExpanded ? (
-                            <ChevronUp className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                            <ChevronUp className="w-4 h-4 text-paper-faint flex-shrink-0" />
                         ) : (
-                            <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                            <ChevronDown className="w-4 h-4 text-paper-faint flex-shrink-0" />
                         )}
-                        <code className="text-xs text-gray-300 truncate">
+                        <code className="text-xs text-paper-muted truncate">
                             {truncateQuery(query.query)}
                         </code>
                     </div>
@@ -245,12 +245,12 @@ function QueryRow({ query, onKill, canKill, isKilling }: QueryRowProps) {
                     </Badge>
                 </TableCell>
                 <TableCell>
-                    <span className="text-gray-300 text-sm">
+                    <span className="text-paper-muted text-sm">
                         {formatBytes(query.memory_usage)}
                     </span>
                 </TableCell>
                 <TableCell>
-                    <span className="text-gray-300 text-sm">
+                    <span className="text-paper-muted text-sm">
                         {formatNumber(query.read_rows)}
                     </span>
                 </TableCell>
@@ -269,8 +269,8 @@ function QueryRow({ query, onKill, canKill, isKilling }: QueryRowProps) {
                                     className={cn(
                                         "h-8 px-3",
                                         canKill
-                                            ? "text-red-400 hover:text-red-300 hover:bg-red-500/20"
-                                            : "text-gray-600 cursor-not-allowed"
+                                            ? "text-red-500 hover:text-red-600 hover:bg-red-500/15 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-500/20"
+                                            : "text-paper-faint cursor-not-allowed"
                                     )}
                                 >
                                     {isKilling ? (
@@ -300,18 +300,18 @@ function QueryRow({ query, onKill, canKill, isKilling }: QueryRowProps) {
                                 transition={{ duration: 0.2 }}
                                 className="overflow-hidden"
                             >
-                                <div className="p-4 bg-gray-800/50 border-t border-gray-700/50">
+                                <div className="p-4 bg-ink-200 border-t border-ink-500">
                                     <div className="flex items-center gap-2 mb-2">
                                         <Terminal className="w-4 h-4 text-paper-muted" />
-                                        <span className="text-sm font-medium text-gray-300">Full Query</span>
+                                        <span className="text-sm font-medium text-paper-muted">Full Query</span>
                                     </div>
-                                    <pre className="text-xs text-gray-300 bg-gray-900/50 p-3 rounded-lg overflow-x-auto whitespace-pre-wrap">
+                                    <pre className="text-xs text-paper bg-ink-100 border border-ink-500 p-3 rounded-xs overflow-x-auto whitespace-pre-wrap">
                                         {query.query}
                                     </pre>
-                                    <div className="mt-3 flex gap-4 text-xs text-gray-500">
-                                        <span>Query ID: <code className="text-gray-400">{query.query_id}</code></span>
-                                        <span>Client: <code className="text-gray-400">{query.client_name || 'Unknown'}</code></span>
-                                        <span>Read Bytes: <code className="text-gray-400">{formatBytes(query.read_bytes)}</code></span>
+                                    <div className="mt-3 flex gap-4 text-xs text-paper-faint">
+                                        <span>Query ID: <code className="text-paper-muted">{query.query_id}</code></span>
+                                        <span>Client: <code className="text-paper-muted">{query.client_name || 'Unknown'}</code></span>
+                                        <span>Read Bytes: <code className="text-paper-muted">{formatBytes(query.read_bytes)}</code></span>
                                     </div>
                                 </div>
                             </motion.div>
@@ -473,7 +473,7 @@ export default function LiveQueriesTable({
                 {/* Toolbar: Search + Controls */}
                 <div className="flex flex-col md:flex-row gap-4">
                     <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-paper-faint" />
                         <Input
                             placeholder="Search by query ID, user, or query text…"
                             value={searchQuery}
@@ -486,7 +486,7 @@ export default function LiveQueriesTable({
                         {/* Refresh Interval Selector */}
                         {!embedded && (
                             <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500 whitespace-nowrap hidden sm:inline">Auto-refresh:</span>
+                                <span className="text-xs text-paper-faint whitespace-nowrap hidden sm:inline">Auto-refresh:</span>
                                 <Select
                                     value={internalRefreshInterval.toString()}
                                     onValueChange={(v) => setInternalRefreshInterval(parseInt(v))}
@@ -592,8 +592,8 @@ export default function LiveQueriesTable({
                             </p>
                         </div>
                         {queryToKill && (
-                            <div className="text-xs text-gray-400">
-                                Query ID: <code className="text-gray-300">{queryToKill}</code>
+                            <div className="text-xs text-paper-faint">
+                                Query ID: <code className="text-paper-muted">{queryToKill}</code>
                             </div>
                         )}
                     </div>

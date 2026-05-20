@@ -56,7 +56,7 @@ const PermissionGuard: React.FC<PermissionGuardProps> = ({
           </TooltipTrigger>
           <TooltipContent>
             <p>You do not have permission to perform this action.</p>
-            <p className="text-xs text-gray-400">Required: {requiredPermission}</p>
+            <p className="text-xs text-paper-muted">Required: {requiredPermission}</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

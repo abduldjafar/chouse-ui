@@ -118,11 +118,11 @@ const CreateDatabase: React.FC = () => {
           </div>
 
           {clusters.length > 0 && (
-            <div className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-3">
+            <div className="p-4 rounded-xs bg-ink-200 border border-ink-500 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Server className="h-4 w-4 text-orange-400" />
-                  <Label className="text-gray-300">Create on Cluster</Label>
+                  <Server className="h-4 w-4 text-amber-600 dark:text-orange-400" />
+                  <Label className="text-paper-muted">Create on Cluster</Label>
                 </div>
                 <Switch checked={useCluster} onCheckedChange={setUseCluster} />
               </div>
@@ -134,7 +134,7 @@ const CreateDatabase: React.FC = () => {
                     exit={{ opacity: 0, height: 0 }}
                   >
                     <Select value={selectedCluster} onValueChange={setSelectedCluster}>
-                      <SelectTrigger className="bg-white/5 border-white/10">
+                      <SelectTrigger className="bg-ink-100 border-ink-500 text-paper">
                         <SelectValue placeholder="Select cluster" />
                       </SelectTrigger>
                       <SelectContent>

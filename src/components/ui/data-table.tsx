@@ -8,14 +8,6 @@ import {
     getPaginationRowModel,
     useReactTable,
 } from "@tanstack/react-table"
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import {
     Select,
@@ -57,34 +49,30 @@ export function DataTable<TData, TValue>({
 
     return (
         <div className={cn("flex flex-col gap-2 h-full w-full", className)}>
-            <div className="relative flex-1 w-full overflow-auto rounded-xl border border-white/10 bg-white/[0.03] backdrop-blur-3xl shadow-[0_20px_50px_rgba(0,0,0,0.5),0_0_20px_rgba(255,255,255,0.02)] transition-all duration-700 group/table">
-                {/* Top light source highlight */}
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none z-20" />
-
-                {/* Raw table used to avoid Shadcn Table component's nested overflow-auto wrapper which breaks sticky headers */}
+            <div className="relative flex-1 w-full overflow-auto rounded-xs border border-ink-500 bg-ink-100">
                 <table className="border-collapse min-w-full w-max table-auto text-sm">
-                    <thead className={cn(
-                        "z-40 border-b border-white/[0.08] shadow-[0_4px_24px_rgba(0,0,0,0.4)]",
-                        stickyHeader && "sticky top-0"
-                    )}>
+                    <thead
+                        className={cn(
+                            "z-40 border-b border-ink-500",
+                            stickyHeader && "sticky top-0"
+                        )}
+                    >
                         {table.getHeaderGroups().map((headerGroup) => (
-                            <tr key={headerGroup.id} className={cn(
-                                "border-0 h-11 backdrop-blur-sm transition-colors",
-                                stickyHeader
-                                    ? "bg-zinc-900/98 supports-[backdrop-filter]:bg-zinc-900/95 supports-[backdrop-filter]:backdrop-blur-xl"
-                                    : "bg-white/[0.02]"
-                            )}>
+                            <tr
+                                key={headerGroup.id}
+                                className="border-0 h-10 bg-ink-200 transition-colors"
+                            >
                                 {headerGroup.headers.map((header, index) => {
                                     const isFirst = index === 0 && stickyFirstColumn;
                                     return (
                                         <th
                                             key={header.id}
                                             className={cn(
-                                                "p-0 border-r border-white/5 last:border-r-0 font-medium text-muted-foreground transition-colors relative",
-                                                isFirst && "sticky left-0 z-50 bg-zinc-900/98 backdrop-blur-sm supports-[backdrop-filter]:bg-zinc-900/95 supports-[backdrop-filter]:backdrop-blur-xl after:absolute after:inset-0 after:bg-white/[0.03] after:pointer-events-none"
+                                                "p-0 border-r border-ink-500/60 last:border-r-0 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-muted transition-colors",
+                                                isFirst && "sticky left-0 z-50 bg-ink-200"
                                             )}
                                         >
-                                            <div className="h-full w-full flex items-center px-4">
+                                            <div className="h-full w-full flex items-center px-3">
                                                 {header.isPlaceholder
                                                     ? null
                                                     : flexRender(
@@ -98,7 +86,7 @@ export function DataTable<TData, TValue>({
                             </tr>
                         ))}
                     </thead>
-                    <tbody className="bg-transparent text-white/90">
+                    <tbody className="bg-transparent text-paper">
                         <AnimatePresence mode="popLayout" initial={false}>
                             {table.getRowModel().rows?.length ? (
                                 table.getRowModel().rows.map((row, rowIndex) => (
@@ -113,8 +101,8 @@ export function DataTable<TData, TValue>({
                                             ease: "easeOut"
                                         }}
                                         className={cn(
-                                            "group transition-all duration-300 border-b border-white/[0.03] hover:bg-white/[0.04] last:border-b-0 h-9",
-                                            row.getIsSelected() && "bg-white/[0.05]"
+                                            "group transition-colors duration-150 border-b border-ink-500/40 hover:bg-ink-200 last:border-b-0 h-9",
+                                            row.getIsSelected() && "bg-ink-200"
                                         )}
                                     >
                                         {row.getVisibleCells().map((cell, cellIndex) => {
@@ -124,14 +112,12 @@ export function DataTable<TData, TValue>({
                                                 <td
                                                     key={cell.id}
                                                     className={cn(
-                                                        "p-0 px-4 h-full align-middle border-r border-white/[0.01] last:border-r-0 py-2 transition-colors duration-300",
-                                                        isFirst && "sticky left-0 z-20 bg-zinc-900/98 backdrop-blur-sm supports-[backdrop-filter]:bg-zinc-900/95 supports-[backdrop-filter]:backdrop-blur-xl group-hover:bg-zinc-800/98 after:absolute after:inset-0 after:bg-white/[0.01] after:pointer-events-none shadow-[4px_0_12px_rgba(0,0,0,0.4)]",
+                                                        "p-0 px-3 h-full align-middle border-r border-ink-500/30 last:border-r-0 py-2 transition-colors",
+                                                        isFirst && "sticky left-0 z-20 bg-ink-100 group-hover:bg-ink-200",
                                                         meta?.wrap ? "whitespace-normal min-w-[300px]" : "whitespace-nowrap"
                                                     )}
                                                 >
-                                                    <div className="transition-transform duration-300 group-hover:translate-x-0.5">
-                                                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                                                    </div>
+                                                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                                 </td>
                                             );
                                         })}
@@ -139,7 +125,7 @@ export function DataTable<TData, TValue>({
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={columns.length} className="h-24 text-center text-white/20 italic font-light">
+                                    <td colSpan={columns.length} className="h-24 text-center text-paper-faint italic font-light">
                                         No results found.
                                     </td>
                                 </tr>
@@ -149,16 +135,16 @@ export function DataTable<TData, TValue>({
                 </table>
             </div>
 
-            <div className="flex items-center justify-between px-2 py-2 border-t border-white/5 bg-white/[0.02]">
+            <div className="flex items-center justify-between px-2 py-2 border-t border-ink-500 bg-ink-100">
                 <div className="flex items-center space-x-2">
-                    <p className="text-xs text-muted-foreground font-medium">Rows per page</p>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-muted">Rows per page</p>
                     <Select
                         value={`${table.getState().pagination.pageSize}`}
                         onValueChange={(value) => {
                             table.setPageSize(Number(value))
                         }}
                     >
-                        <SelectTrigger className="h-8 w-[70px] bg-white/5 border-white/10 text-xs">
+                        <SelectTrigger className="h-7 w-[70px] bg-ink-200 border-ink-500 text-xs">
                             <SelectValue placeholder={table.getState().pagination.pageSize} />
                         </SelectTrigger>
                         <SelectContent side="top">
@@ -171,46 +157,46 @@ export function DataTable<TData, TValue>({
                     </Select>
                 </div>
                 <div className="flex items-center space-x-6 lg:space-x-8">
-                    <div className="flex w-[100px] items-center justify-center text-xs font-medium text-muted-foreground">
+                    <div className="flex w-[100px] items-center justify-center font-mono text-[11px] text-paper-muted">
                         Page {table.getState().pagination.pageIndex + 1} of{" "}
                         {table.getPageCount()}
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1.5">
                         <Button
                             variant="outline"
-                            className="hidden h-8 w-8 p-0 lg:flex bg-white/5 border-white/10 hover:bg-white/10"
+                            className="hidden h-7 w-7 p-0 lg:flex bg-ink-200 border-ink-500 text-paper-muted hover:bg-ink-300 hover:text-paper"
                             onClick={() => table.setPageIndex(0)}
                             disabled={!table.getCanPreviousPage()}
                         >
                             <span className="sr-only">Go to first page</span>
-                            <ChevronsLeft className="h-4 w-4" />
+                            <ChevronsLeft className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                             variant="outline"
-                            className="h-8 w-8 p-0 bg-white/5 border-white/10 hover:bg-white/10"
+                            className="h-7 w-7 p-0 bg-ink-200 border-ink-500 text-paper-muted hover:bg-ink-300 hover:text-paper"
                             onClick={() => table.previousPage()}
                             disabled={!table.getCanPreviousPage()}
                         >
                             <span className="sr-only">Go to previous page</span>
-                            <ChevronLeft className="h-4 w-4" />
+                            <ChevronLeft className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                             variant="outline"
-                            className="h-8 w-8 p-0 bg-white/5 border-white/10 hover:bg-white/10"
+                            className="h-7 w-7 p-0 bg-ink-200 border-ink-500 text-paper-muted hover:bg-ink-300 hover:text-paper"
                             onClick={() => table.nextPage()}
                             disabled={!table.getCanNextPage()}
                         >
                             <span className="sr-only">Go to next page</span>
-                            <ChevronRight className="h-4 w-4" />
+                            <ChevronRight className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                             variant="outline"
-                            className="hidden h-8 w-8 p-0 lg:flex bg-white/5 border-white/10 hover:bg-white/10"
+                            className="hidden h-7 w-7 p-0 lg:flex bg-ink-200 border-ink-500 text-paper-muted hover:bg-ink-300 hover:text-paper"
                             onClick={() => table.setPageIndex(table.getPageCount() - 1)}
                             disabled={!table.getCanNextPage()}
                         >
                             <span className="sr-only">Go to last page</span>
-                            <ChevronsRight className="h-4 w-4" />
+                            <ChevronsRight className="h-3.5 w-3.5" />
                         </Button>
                     </div>
                 </div>

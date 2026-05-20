@@ -327,7 +327,7 @@ const DownloadDialog: React.FC<DownloadDialogProps> = ({
             </div>
           </RadioGroup>
 
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-paper-faint">
             Estimated size: {estimatedSize}
             {data.length > maxRows && (
               <div className="flex items-center mt-2 text-amber-500">
@@ -340,7 +340,7 @@ const DownloadDialog: React.FC<DownloadDialogProps> = ({
           {isProcessing && (
             <div className="space-y-2">
               <Progress value={progress} />
-              <p className="text-sm text-gray-500 text-center">
+              <p className="text-sm text-paper-faint text-center">
                 Processing... {Math.round(progress)}%
               </p>
             </div>

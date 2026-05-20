@@ -16,11 +16,11 @@ const editorialClassNames = {
   cancelButton:
     "group-[.toast]:h-8 group-[.toast]:rounded-xs group-[.toast]:border group-[.toast]:border-ink-500 group-[.toast]:bg-ink-100 group-[.toast]:px-3 group-[.toast]:font-mono group-[.toast]:text-[11px] group-[.toast]:uppercase group-[.toast]:tracking-[0.14em] group-[.toast]:text-paper hover:group-[.toast]:bg-ink-200",
   success:
-    "!border-emerald-900/60 !bg-emerald-950/30 !text-emerald-100 [&_[data-icon]]:!text-emerald-300",
+    "!border-emerald-200 !bg-emerald-50 !text-emerald-900 [&_[data-icon]]:!text-emerald-600 dark:!border-emerald-900/60 dark:!bg-emerald-950/30 dark:!text-emerald-100 dark:[&_[data-icon]]:!text-emerald-300",
   error:
-    "!border-red-900/60 !bg-red-950/30 !text-red-100 [&_[data-icon]]:!text-red-300",
+    "!border-red-200 !bg-red-50 !text-red-900 [&_[data-icon]]:!text-red-600 dark:!border-red-900/60 dark:!bg-red-950/30 dark:!text-red-100 dark:[&_[data-icon]]:!text-red-300",
   warning:
-    "!border-amber-900/60 !bg-amber-950/30 !text-amber-100 [&_[data-icon]]:!text-amber-300",
+    "!border-amber-200 !bg-amber-50 !text-amber-900 [&_[data-icon]]:!text-amber-600 dark:!border-amber-900/60 dark:!bg-amber-950/30 dark:!text-amber-100 dark:[&_[data-icon]]:!text-amber-300",
   info: "!border-ink-500 !bg-ink-100 !text-paper [&_[data-icon]]:!text-paper-dim",
   loading:
     "!border-ink-500 !bg-ink-100 !text-paper [&_[data-icon]]:!text-paper-dim",
