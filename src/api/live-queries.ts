@@ -21,6 +21,8 @@ export interface LiveQuery {
     memory_usage: number;
     is_initial_query: number;
     client_name: string;
+    cpu_time_microseconds: number;
+    thread_count: number;
     rbac_user_id?: string;
     rbac_user?: string;
     rbac_user_display_name?: string;

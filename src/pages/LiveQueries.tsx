@@ -117,6 +117,20 @@ function formatDuration(seconds: unknown): string {
     return `${mins}m ${secs}s`;
 }
 
+// Convert microseconds of CPU time into something operators can scan quickly.
+// 1.2s of CPU across 4 threads is more meaningful than "1,247,521" microseconds.
+function formatCpuTime(microseconds: unknown): string {
+    const n = toFiniteNumber(microseconds);
+    if (n === null || n === 0) return '—';
+    const ms = n / 1000;
+    if (ms < 1) return `${n}µs`;
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    const s = ms / 1000;
+    if (s < 60) return `${s.toFixed(1)}s`;
+    const m = Math.floor(s / 60);
+    return `${m}m ${(s % 60).toFixed(0)}s`;
+}
+
 function truncateQuery(query: string, maxLength: number = 100): string {
     if (query.length <= maxLength) return query;
     return query.substring(0, maxLength) + '...';
@@ -150,7 +164,44 @@ function StatsCard({ icon: Icon, label, value }: StatsCardProps) {
 }
 
 // ============================================
-// Query Row Component  
+// Sortable column header — click to set the current sort key. Active key
+// gets a chevron and brand-tinted label. No multi-direction toggle: every
+// sort is "biggest at top" because that's what an operator chasing a hot
+// query actually wants.
+// ============================================
+
+type SortKey = 'duration' | 'cpu' | 'memory' | 'rows';
+
+function SortableTableHead({
+    label,
+    sortKey,
+    current,
+    onSort,
+}: {
+    label: string;
+    sortKey: SortKey;
+    current: SortKey;
+    onSort: (k: SortKey) => void;
+}) {
+    const isActive = current === sortKey;
+    return (
+        <TableHead
+            onClick={() => onSort(sortKey)}
+            className={cn(
+                "cursor-pointer select-none font-mono text-[10px] uppercase tracking-[0.14em] transition-colors",
+                isActive ? "text-brand" : "text-paper-faint hover:text-paper-muted"
+            )}
+        >
+            <span className="inline-flex items-center gap-1">
+                {label}
+                {isActive && <ChevronDown className="h-3 w-3" aria-hidden />}
+            </span>
+        </TableHead>
+    );
+}
+
+// ============================================
+// Query Row Component
 // ============================================
 
 interface QueryRowProps {
@@ -255,6 +306,14 @@ function QueryRow({ query, onKill, canKill, isKilling }: QueryRowProps) {
                     </span>
                 </TableCell>
                 <TableCell>
+                    <div className="flex flex-col font-mono text-[12px] leading-tight">
+                        <span className="text-paper">{formatCpuTime(query.cpu_time_microseconds)}</span>
+                        {query.thread_count > 0 && (
+                            <span className="text-[10px] text-paper-faint">{query.thread_count} thr</span>
+                        )}
+                    </div>
+                </TableCell>
+                <TableCell>
                     <TooltipProvider>
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -292,7 +351,7 @@ function QueryRow({ query, onKill, canKill, isKilling }: QueryRowProps) {
             <AnimatePresence>
                 {isExpanded && (
                     <TableRow>
-                        <TableCell colSpan={7} className="p-0">
+                        <TableCell colSpan={8} className="p-0">
                             <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: 'auto', opacity: 1 }}
@@ -350,6 +409,7 @@ export default function LiveQueriesTable({
     const [searchQuery, setSearchQuery] = useState('');
     const [internalRefreshInterval, setInternalRefreshInterval] = useState(3000);
     const [queryToKill, setQueryToKill] = useState<string | null>(null);
+    const [sortBy, setSortBy] = useState<'duration' | 'cpu' | 'memory' | 'rows'>('duration');
 
     // If embedded, use external autoRefresh (fixed to 3s when on) or 0 (off)
     // If not embedded, use internal selector
@@ -380,15 +440,27 @@ export default function LiveQueriesTable({
     // Filter queries based on search
     const filteredQueries = useMemo(() => {
         if (!data?.queries) return [];
-        if (!searchQuery) return data.queries;
+        const filtered = !searchQuery
+            ? data.queries
+            : (() => {
+                const query = searchQuery.toLowerCase();
+                return data.queries.filter(q =>
+                    q.query_id.toLowerCase().includes(query) ||
+                    q.user.toLowerCase().includes(query) ||
+                    q.query.toLowerCase().includes(query)
+                );
+            })();
 
-        const query = searchQuery.toLowerCase();
-        return data.queries.filter(q =>
-            q.query_id.toLowerCase().includes(query) ||
-            q.user.toLowerCase().includes(query) ||
-            q.query.toLowerCase().includes(query)
-        );
-    }, [data?.queries, searchQuery]);
+        const sorted = [...filtered].sort((a, b) => {
+            switch (sortBy) {
+                case 'cpu':    return (b.cpu_time_microseconds || 0) - (a.cpu_time_microseconds || 0);
+                case 'memory': return (b.memory_usage || 0) - (a.memory_usage || 0);
+                case 'rows':   return (b.read_rows || 0) - (a.read_rows || 0);
+                default:       return (b.elapsed_seconds || 0) - (a.elapsed_seconds || 0);
+            }
+        });
+        return sorted;
+    }, [data?.queries, searchQuery, sortBy]);
 
     const handleKillQuery = useCallback((queryId: string) => {
         setQueryToKill(queryId);
@@ -553,9 +625,10 @@ export default function LiveQueriesTable({
                                         <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Query ID</TableHead>
                                         <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">User</TableHead>
                                         <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Query</TableHead>
-                                        <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Duration</TableHead>
-                                        <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Memory</TableHead>
-                                        <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Rows</TableHead>
+                                        <SortableTableHead label="Duration" sortKey="duration" current={sortBy} onSort={setSortBy} />
+                                        <SortableTableHead label="Memory" sortKey="memory" current={sortBy} onSort={setSortBy} />
+                                        <SortableTableHead label="Rows" sortKey="rows" current={sortBy} onSort={setSortBy} />
+                                        <SortableTableHead label="CPU" sortKey="cpu" current={sortBy} onSort={setSortBy} />
                                         <TableHead className="w-[80px] font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Action</TableHead>
                                     </TableRow>
                                 </TableHeader>

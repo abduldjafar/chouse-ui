@@ -12,12 +12,26 @@ import { Clock, HardDrive, Layers, Rows3, RefreshCw } from "lucide-react";
 
 import {
   useQueryHistogram,
+  useQueryPercentiles,
   type AbsoluteRange,
   type HistogramMetric,
 } from "@/hooks/useMonitoringTimeline";
 import { SkeletonChart } from "@/components/common/Skeletons";
 import { useChartColors } from "@/hooks/useChartColors";
-import { cn } from "@/lib/utils";
+import { cn, formatBytes, formatCompactNumber } from "@/lib/utils";
+
+function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return "0";
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}min`;
+}
+
+function formatMetricValue(metric: HistogramMetric, value: number): string {
+  if (metric === "duration") return formatDuration(value);
+  if (metric === "memory" || metric === "read_bytes") return formatBytes(value) || "0";
+  return formatCompactNumber(value);
+}
 
 interface QueryHistogramChartProps {
   hoursBack: number;
@@ -45,6 +59,7 @@ export function QueryHistogramChart({
     hoursBack,
     customRange
   );
+  const { data: percentiles } = useQueryPercentiles(metric, hoursBack, customRange);
 
   const totalCount = useMemo(
     () => data.reduce((s, b) => s + b.count, 0),
@@ -76,6 +91,13 @@ export function QueryHistogramChart({
         </div>
 
         <div className="flex items-center gap-3 text-[11px]">
+          {percentiles && totalCount > 0 && (
+            <div className="hidden items-center gap-2 md:flex">
+              <PercentileChip label="p50" value={formatMetricValue(metric, percentiles.p50)} />
+              <PercentileChip label="p95" value={formatMetricValue(metric, percentiles.p95)} />
+              <PercentileChip label="p99" value={formatMetricValue(metric, percentiles.p99)} tone="warn" />
+            </div>
+          )}
           {peakLabel && (
             <span className="font-mono uppercase tracking-[0.14em] text-paper-faint">
               Peak · <span className="text-paper">{peakLabel}</span>
@@ -179,6 +201,30 @@ export function QueryHistogramChart({
         )}
       </div>
     </section>
+  );
+}
+
+function PercentileChip({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "warn";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-xs border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]",
+        tone === "warn"
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          : "border-ink-500 bg-ink-200 text-paper-muted"
+      )}
+    >
+      <span className="text-paper-faint">{label}</span>
+      <span className={tone === "warn" ? "text-amber-800 dark:text-amber-100" : "text-paper"}>{value}</span>
+    </span>
   );
 }
 

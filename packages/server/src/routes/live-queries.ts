@@ -33,6 +33,8 @@ interface LiveQuery {
     memory_usage: number;
     is_initial_query: number;
     client_name: string;
+    cpu_time_microseconds: number; // ProfileEvents['OSCPUVirtualTimeMicroseconds']
+    thread_count: number;          // length(thread_ids)
     rbac_user_id?: string; // Derived from log_comment
     rbac_user?: string; // Resolved from rbac_user_id
     rbac_user_display_name?: string; // Resolved from rbac_user_id
@@ -214,7 +216,7 @@ liveQueries.get("/", async (c) => {
         // 2. Internal/system queries that are short-lived
         // 3. Queries that have already completed (very short elapsed time likely means it's finishing)
         const result = await service.executeQuery(`
-      SELECT 
+      SELECT
         query_id,
         user,
         query,
@@ -224,6 +226,8 @@ liveQueries.get("/", async (c) => {
         memory_usage,
         is_initial_query,
         client_name,
+        ProfileEvents['OSCPUVirtualTimeMicroseconds'] as cpu_time_microseconds,
+        length(thread_ids) as thread_count,
         Settings['log_comment'] as log_comment_json
       FROM system.processes
       WHERE is_initial_query = 1

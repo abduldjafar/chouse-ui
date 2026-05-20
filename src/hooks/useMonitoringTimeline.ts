@@ -548,6 +548,61 @@ export function useQueryHistogram(
   });
 }
 
+export interface QueryPercentiles {
+  p50: number;
+  p95: number;
+  p99: number;
+  max: number;
+}
+
+/**
+ * p50 / p95 / p99 / max of the chosen metric for the active time window.
+ * Lets operators eyeball tail latency / memory / scan size without doing
+ * the math themselves — complements the histogram, which only shows shape.
+ */
+export function useQueryPercentiles(
+  metric: HistogramMetric,
+  hoursBack: number = 6,
+  customRange?: AbsoluteRange,
+  options?: Partial<UseQueryOptions<QueryPercentiles, Error>>
+) {
+  const { activeConnectionId } = useAuthStore();
+  const spec = HISTOGRAM_SPECS[metric];
+
+  return useQuery({
+    queryKey: [
+      "queryPercentiles",
+      metric,
+      hoursBack,
+      customRange?.start ?? null,
+      customRange?.end ?? null,
+      activeConnectionId,
+    ] as const,
+    queryFn: async () => {
+      const sql = `
+        SELECT
+          quantile(0.50)(${spec.field}) AS p50,
+          quantile(0.95)(${spec.field}) AS p95,
+          quantile(0.99)(${spec.field}) AS p99,
+          max(${spec.field}) AS mx
+        FROM system.query_log
+        WHERE ${timeWindowWhere(hoursBack, customRange)}
+          AND type IN ('QueryFinish', 'ExceptionWhileProcessing', 'ExceptionBeforeStart')
+      `;
+      const result = await queryApi.executeQuery(sql);
+      const row = (result.data as Array<Record<string, unknown>>)[0] ?? {};
+      return {
+        p50: num(row.p50),
+        p95: num(row.p95),
+        p99: num(row.p99),
+        max: num(row.mx),
+      };
+    },
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
 export interface MutationRow {
   database: string;
   table: string;
@@ -670,6 +725,102 @@ export function useReplicationQueue(
       }));
     },
     staleTime: 30_000,
+    ...options,
+  });
+}
+
+export interface ReplicaStatusRow {
+  database: string;
+  table: string;
+  replica_name: string;
+  absolute_delay: number;       // seconds behind leader
+  queue_size: number;           // length(log_max_index - log_pointer)
+  is_readonly: number;
+  is_session_expired: number;
+}
+
+/**
+ * Per-replica lag and pending work from system.replicas. A non-zero
+ * absolute_delay or rising queue_size on a single replica is the canonical
+ * "this replica is behind / stuck" signal.
+ */
+export function useReplicaStatus(
+  options?: Partial<UseQueryOptions<ReplicaStatusRow[], Error>>
+) {
+  const { activeConnectionId } = useAuthStore();
+
+  return useQuery({
+    queryKey: ["replicaStatus", activeConnectionId] as const,
+    queryFn: async () => {
+      const sql = `
+        SELECT
+          database,
+          table,
+          replica_name,
+          absolute_delay,
+          (log_max_index - log_pointer) AS queue_size,
+          is_readonly,
+          is_session_expired
+        FROM system.replicas
+        ORDER BY absolute_delay DESC, queue_size DESC
+        LIMIT 200
+      `;
+      const result = await queryApi.executeQuery(sql);
+      return (result.data as Array<Record<string, unknown>>).map((row) => ({
+        database: String(row.database ?? ""),
+        table: String(row.table ?? ""),
+        replica_name: String(row.replica_name ?? ""),
+        absolute_delay: num(row.absolute_delay),
+        queue_size: num(row.queue_size),
+        is_readonly: num(row.is_readonly),
+        is_session_expired: num(row.is_session_expired),
+      }));
+    },
+    staleTime: 15_000,
+    ...options,
+  });
+}
+
+export interface BlockedTaskSummary {
+  long_running_queries: number;  // system.processes elapsed > 60s
+  long_running_merges: number;   // system.merges elapsed > 300s
+  open_mutations: number;        // system.mutations is_done = 0
+  sick_replicas: number;         // system.replicas absolute_delay > 60 OR is_readonly
+  max_replica_lag_seconds: number;
+}
+
+/**
+ * Roll-up of "this thing is blocked / stuck" signals across the cluster.
+ * Single SQL call so it fits a header indicator strip without spawning four
+ * separate queries on every poll.
+ */
+export function useBlockedTaskSummary(
+  options?: Partial<UseQueryOptions<BlockedTaskSummary, Error>>
+) {
+  const { activeConnectionId } = useAuthStore();
+
+  return useQuery({
+    queryKey: ["blockedTaskSummary", activeConnectionId] as const,
+    queryFn: async () => {
+      const sql = `
+        SELECT
+          (SELECT count() FROM system.processes WHERE elapsed > 60) AS long_running_queries,
+          (SELECT count() FROM system.merges WHERE elapsed > 300) AS long_running_merges,
+          (SELECT count() FROM system.mutations WHERE is_done = 0) AS open_mutations,
+          (SELECT count() FROM system.replicas WHERE absolute_delay > 60 OR is_readonly = 1) AS sick_replicas,
+          (SELECT max(absolute_delay) FROM system.replicas) AS max_replica_lag_seconds
+      `;
+      const result = await queryApi.executeQuery(sql);
+      const row = (result.data as Array<Record<string, unknown>>)[0] ?? {};
+      return {
+        long_running_queries: num(row.long_running_queries),
+        long_running_merges: num(row.long_running_merges),
+        open_mutations: num(row.open_mutations),
+        sick_replicas: num(row.sick_replicas),
+        max_replica_lag_seconds: num(row.max_replica_lag_seconds),
+      };
+    },
+    staleTime: 15_000,
     ...options,
   });
 }

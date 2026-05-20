@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search, AlertTriangle, CheckCircle2, Network, Wrench } from "lucide-react";
+import { Search, AlertTriangle, CheckCircle2, Network, Wrench, Activity, Layers, Database, Hourglass } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { SkeletonRows } from "@/components/common/Skeletons";
@@ -7,10 +7,19 @@ import { PaginationBar } from "@/components/monitoring/PaginationBar";
 import {
   useMutations,
   useReplicationQueue,
+  useReplicaStatus,
+  useBlockedTaskSummary,
   type MutationRow,
   type ReplicationQueueRow,
 } from "@/hooks/useMonitoringTimeline";
 import { cn } from "@/lib/utils";
+
+function formatLagSeconds(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "0s";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  return `${(seconds / 3600).toFixed(1)}h`;
+}
 
 type ClusterView = "mutations" | "replication";
 
@@ -49,6 +58,8 @@ export default function ClusterActivityPage({
 
   const mutations = useMutations({ enabled: view === "mutations" });
   const replication = useReplicationQueue({ enabled: view === "replication" });
+  const blockedSummary = useBlockedTaskSummary();
+  const replicaStatus = useReplicaStatus({ enabled: view === "replication" });
   const active = view === "mutations" ? mutations : replication;
   const { isLoading, isFetching, error, refetch } = active;
 
@@ -142,6 +153,88 @@ export default function ClusterActivityPage({
           </span>
           <p className="text-[12px] leading-[1.6] text-paper-muted">{COPY[view].rationale}</p>
         </div>
+
+        {/* Blocked-task indicator strip — visible on every sub-tab so an
+            operator scanning Mutations doesn't miss that the merge queue is
+            backed up or that a replica is way behind. */}
+        {blockedSummary.data && (
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <BlockedChip
+              icon={Activity}
+              label="Long queries"
+              value={blockedSummary.data.long_running_queries}
+              hint=">60s"
+              warnThreshold={1}
+            />
+            <BlockedChip
+              icon={Layers}
+              label="Long merges"
+              value={blockedSummary.data.long_running_merges}
+              hint=">5min"
+              warnThreshold={1}
+            />
+            <BlockedChip
+              icon={Database}
+              label="Open mutations"
+              value={blockedSummary.data.open_mutations}
+              hint="not done"
+              warnThreshold={1}
+            />
+            <BlockedChip
+              icon={Hourglass}
+              label="Max replica lag"
+              value={formatLagSeconds(blockedSummary.data.max_replica_lag_seconds)}
+              numericValue={blockedSummary.data.max_replica_lag_seconds}
+              hint={`${blockedSummary.data.sick_replicas} sick`}
+              warnThreshold={60}
+            />
+          </div>
+        )}
+
+        {/* Replica status panel — only on the replication view */}
+        {view === "replication" && replicaStatus.data && replicaStatus.data.length > 0 && (
+          <div className="rounded-xs border border-ink-500 bg-ink-100">
+            <div className="flex items-center justify-between border-b border-ink-500 px-3 py-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
+                Replica status · top {Math.min(replicaStatus.data.length, 6)}
+              </span>
+              <span className="font-mono text-[10px] tracking-[0.14em] text-paper-faint">
+                {replicaStatus.data.length} replicas
+              </span>
+            </div>
+            <div className="grid grid-cols-1 divide-y divide-ink-500/60 md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-3">
+              {replicaStatus.data.slice(0, 6).map((r) => {
+                const sick = r.absolute_delay > 60 || r.is_readonly === 1 || r.is_session_expired === 1;
+                return (
+                  <div
+                    key={`${r.database}.${r.table}.${r.replica_name}`}
+                    className="flex items-center justify-between gap-3 px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-mono text-[11px] text-paper" title={`${r.database}.${r.table}`}>
+                        {r.database}.{r.table}
+                      </div>
+                      <div className="truncate font-mono text-[10px] text-paper-faint" title={r.replica_name}>
+                        {r.replica_name}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-0.5">
+                      <span className={cn(
+                        "font-mono text-[11px] tabular-nums",
+                        sick ? "text-red-600 dark:text-red-300" : "text-paper"
+                      )}>
+                        {formatLagSeconds(r.absolute_delay)}
+                      </span>
+                      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-paper-faint">
+                        q{r.queue_size.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Filter + summary strip */}
         <div className="flex flex-wrap items-center gap-3 rounded-md border border-ink-500 bg-ink-100 p-3">
@@ -381,6 +474,60 @@ function ReplicationTable({ rows }: ReplicationTableProps) {
         })}
       </tbody>
     </table>
+  );
+}
+
+function BlockedChip({
+  icon: Icon,
+  label,
+  value,
+  hint,
+  warnThreshold,
+  numericValue,
+}: {
+  icon: typeof AlertTriangle;
+  label: string;
+  value: number | string;
+  hint?: string;
+  warnThreshold: number;
+  numericValue?: number;
+}) {
+  const compareValue = typeof numericValue === "number" ? numericValue : (typeof value === "number" ? value : 0);
+  const isWarn = compareValue >= warnThreshold;
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-3 rounded-xs border px-3 py-2",
+        isWarn
+          ? "border-amber-500/40 bg-amber-500/[0.06]"
+          : "border-ink-500 bg-ink-100"
+      )}
+    >
+      <span
+        className={cn(
+          "grid h-7 w-7 shrink-0 place-items-center rounded-xs border",
+          isWarn
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+            : "border-ink-500 bg-ink-200 text-paper-muted"
+        )}
+      >
+        <Icon className="h-3.5 w-3.5" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-paper-faint">
+          {label}
+          {hint && <span className="ml-1 text-paper-faint/70">· {hint}</span>}
+        </div>
+        <div
+          className={cn(
+            "font-mono text-[16px] font-semibold leading-tight tabular-nums",
+            isWarn ? "text-amber-800 dark:text-amber-100" : "text-paper"
+          )}
+        >
+          {typeof value === "number" ? value.toLocaleString() : value}
+        </div>
+      </div>
+    </div>
   );
 }
 
