@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [v2.15.1] - 2026-05-21
+
+Docs + landing-page refresh to match what actually shipped in v2.15.0. No app code changes.
+
+### Changed
+
+- **README** brought current with the v2.15.0 feature set: Query logs now lists **5 sub-views** (added By Redash), the Monitoring section covers the server memory breakdown / top memory-CPU query tables / blocked-task strip / per-replica lag / p50-p95-p99 chips / Memory·CPU·ZooKeeper metrics tabs, Live queries notes CPU time + thread count + sortable columns, and User Experience reflects the shipped **light + dark + Auto-by-time** theme. Added a **Monitoring** row to the "Why CHouse UI" table and listed **CH 24.11** under tested compatibility.
+- **Landing page** (`docs/portfolio`):
+  - New **"What shipped recently"** release-highlight strip above the fold — three hairline-grid cards (light theme / monitoring deep-dive / By Redash) with a staggered scroll reveal, marked by a pulsing `v2.15.0` accent tag.
+  - **Features** gained a **Monitoring & Observability** category (8 items); section reworded to "Six domains". UX "Dark Theme" item → "Light + Dark + Auto"; Responsive item now mentions container-query layouts.
+  - **Highlights** "Live operations" → **"Deep observability"**, reframed around ClickHouse-native monitoring with the no-exporter angle.
+  - **Hero** subtitle now mentions ClickHouse-native monitoring; boot-log version bumped to match the release.
+  - Synced the stale landing CHANGELOG copy (was v2.3.0) from the root so the version badge + changelog section render the latest release.
+
+
 ## [v2.15.0] - 2026-05-20
 
 Phase 3 lands on top of the Monitoring deep-dive from v2.14.0: a full Light mode (with auto-by-time-of-day switching), a memory-pressure story that finally answers "kepakai apa", and a By Redash rollup so DE/Data Platform can map cluster pain back to the saved dashboard query that caused it.

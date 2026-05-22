@@ -16,7 +16,7 @@ const BOOT_LOG = [
   { kind: "muted", text: "" },
   { kind: "muted", text: "[RBAC] Initializing RBAC system…" },
   { kind: "muted", text: "[RBAC] Database type: sqlite" },
-  { kind: "muted", text: "[RBAC] App version: 2.15.0" },
+  { kind: "muted", text: "[RBAC] App version: 2.15.1" },
   { kind: "muted", text: "[RBAC] Running migration: 1.17.1" },
   { kind: "accent", text: "[RBAC] system ready" },
   { kind: "muted", text: "" },
