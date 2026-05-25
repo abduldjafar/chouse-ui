@@ -38,9 +38,9 @@ const GROUPS: FeatureGroup[] = [
     category: "AI & Automation",
     icon: Sparkles,
     items: [
-      { icon: Zap, title: "Query Optimizer", desc: "Intelligent query rewriting for performance" },
-      { icon: Bot, title: "Query Debugging", desc: "Automated error analysis and fix suggestions" },
-      { icon: MessageSquare, title: "Chat Assistant", desc: "Conversational data exploration and charts" },
+      { icon: Zap, title: "Optimize from logs", desc: "Optimize any logged query with Chouse AI — a rewrite with the same result, a before→after EXPLAIN estimate, and one click to open it in the Explorer" },
+      { icon: Bot, title: "Diagnose errors & parts", desc: "One-click Chouse AI on a system.errors row or a part-log entry → cause, impact, and ordered fixes (merge pressure, too many parts, partition key)" },
+      { icon: MessageSquare, title: "Chat copilot", desc: "Conversational data exploration and chart building against a connection" },
     ],
   },
   {
