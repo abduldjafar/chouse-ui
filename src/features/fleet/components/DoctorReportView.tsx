@@ -333,7 +333,7 @@ function EstimateBlock({ estimate }: { estimate: NonNullable<FleetDoctorHeavyQue
   );
 }
 
-function HeavyQueryCard({ hq }: { hq: FleetDoctorHeavyQuery }) {
+export function HeavyQueryCard({ hq }: { hq: FleetDoctorHeavyQuery }) {
   const formattedOriginal = formatClickHouseSQL(hq.query);
   const formattedOptimized = hq.optimizedQuery ? formatClickHouseSQL(hq.optimizedQuery) : "";
   return (

@@ -142,24 +142,32 @@ function vitalsFromOverview(o: Record<string, unknown>): NodeVitals {
   };
 }
 
+// Single source of truth for the system.* schema, shared by every Chouse AI
+// prompt (fleet scan, single-query optimize, error diagnosis) so the agent never
+// guesses a column name (e.g. system.errors has last_error_time, NOT event_time).
+const SYSTEM_TABLE_REFERENCE = `ClickHouse system.* column reference — use these EXACT column names; a wrong guess wastes a full round-trip and fails:
+- system.processes (queries running NOW): query_id, user, query, elapsed (Float64 SECONDS — NOT elapsed_ms / elapsed_seconds), memory_usage, peak_memory_usage, read_rows, read_bytes, total_rows_approx, query_kind, is_cancelled.
+- system.query_log (FINISHED queries): event_time, query_start_time, query_duration_ms (UInt64 ms — there is NO "elapsed"), type ('QueryFinish' / 'ExceptionWhileProcessing' / …), query, query_id, user, memory_usage (peak), read_rows, read_bytes, result_rows, exception, exception_code, normalized_query_hash. Filter type = 'QueryFinish' for completed queries.
+- system.errors (server error counters since start): name, code, value (the hit COUNT), last_error_time, last_error_message, last_error_trace, remote. There is NO event_time / event_date / count column — order by last_error_time or value, and filter by code or name.
+- system.merges (in-progress merges): database, table, elapsed, progress (0..1), num_parts, result_part_name, total_size_bytes_compressed, is_mutation, merge_type, rows_read, rows_written. EVERY row is already a currently-running merge — do NOT add a WHERE is_current / is_running / is_active filter (no such column); just SELECT … FROM system.merges. There is NO type / reason / status / total_size_memory / bytes_in_source_parts / is_current.
+- system.mutations: database, table, mutation_id, command, create_time, parts_to_do (remaining), is_done, latest_failed_part, latest_fail_time, latest_fail_reason. There is NO parts_done / fail_count — use is_done + parts_to_do, and latest_fail_reason for failures.
+- system.replicas: database, table, is_readonly, is_session_expired, absolute_delay (lag in SECONDS), queue_size, inserts_in_queue, merges_in_queue, total_replicas, active_replicas, zookeeper_path. There is NO partitions_total / parts_active.
+- system.disks (free space): name, path, free_space, total_space, unreserved_space, keep_free_space.
+- Current metric VALUES: query system.metrics or system.asynchronous_metrics — both LONG format (columns: metric, value, description). system.metric_log is WIDE (one column per metric: CurrentMetric_*, ProfileEvent_*) — do NOT SELECT metric, value FROM system.metric_log.
+- system.parts (on-disk parts): database, table, partition, active, rows, bytes_on_disk, data_compressed_bytes, modification_time, level. GROUP BY partition to see partition sizes + part counts (scanning every partition = no pruning; many parts = merge pressure).
+- system.tables (one row per table): database, table, engine, total_rows, total_bytes, partition_key, sorting_key, primary_key, engine_full, and \`as_select\` + \`create_table_query\` (the SELECT/DDL for a view). Engine tells the kind: a MergeTree-family engine = real stored data; \`View\` = NO data of its own; \`MaterializedView\` = data in a hidden inner table.
+- system.columns (one row per column): database, table, name, type, data_compressed_bytes, data_uncompressed_bytes, marks_bytes. Filter by database+table; ORDER BY data_compressed_bytes DESC to find the heaviest columns + types that should be narrower / LowCardinality.
+- system.query_log also has \`tables\` Array(String) + \`columns\` Array(String) (what a query touched) and ProfileEvents Map(String,UInt64). Use \`tables\` to learn which tables a heavy query read instead of parsing SQL.
+system.processes, system.merges and system.replicas contain ONLY live rows — NEVER filter them by a made-up boolean like is_current / is_running / is_active; to list current activity just SELECT … FROM the table with no such WHERE. Prefer "SELECT * FROM system.<table> LIMIT 5" to discover the real columns before filtering.
+If a query errors with "Unknown expression identifier", re-read this list — do NOT retry random column-name variants.`;
+
 const SYSTEM_PROMPT = `You are Chouse AI, acting as ClickHouse's fleet doctor — an expert Site Reliability Engineer reviewing a fleet of ClickHouse servers ("nodes").
 
 You are given a JSON overview with one object per node: server memory %, CPU %, active/long-running query counts, blocked merges/mutations, replica lag + sick replicas, uptime, version, the top memory-consuming queries running NOW, the longest-running query, recent exceptions, and \`recentHeavyQueries\` — the heaviest query SHAPES by memory over the selected investigation window (peak_gb, avg_gb, runs, user, sample, last_seen) from system.query_log, so you catch memory-hungry queries even if they already finished. The window length is stated in the user message.
 
 1. Read the overview and spot anything unhealthy — memory pressure, a single runaway query running now, a query shape that repeatedly peaks high memory over the window (from recentHeavyQueries — call out the worst offenders, their peak_gb, user, and how often they run), replication lag, stuck merges/mutations, repeated exceptions, version skew.
 2. When you need detail, use the \`query_node\` tool to run a READ-ONLY SELECT against that node's \`system.*\` tables (system.processes, system.replicas, system.merges, system.mutations, system.query_log, system.parts, system.asynchronous_metrics, …). It is read-only — writes/DDL/KILL are rejected — so investigate freely, but you can only observe.
-ClickHouse system.* column reference — use these EXACT column names; a wrong guess wastes a full round-trip and fails:
-- system.processes (queries running NOW): query_id, user, query, elapsed (Float64 SECONDS — NOT elapsed_ms / elapsed_seconds), memory_usage, peak_memory_usage, read_rows, read_bytes, total_rows_approx, query_kind, is_cancelled.
-- system.query_log (FINISHED queries): event_time, query_start_time, query_duration_ms (UInt64 ms — there is NO "elapsed"), type ('QueryFinish' / 'ExceptionWhileProcessing' / …), query, query_id, user, memory_usage (peak), read_rows, read_bytes, result_rows, exception, exception_code, normalized_query_hash. Filter type = 'QueryFinish' for completed queries.
-- system.merges (in-progress merges): database, table, elapsed, progress (0..1), num_parts, result_part_name, total_size_bytes_compressed, is_mutation, merge_type, rows_read, rows_written. There is NO type / reason / status / total_size_memory / bytes_in_source_parts.
-- system.mutations: database, table, mutation_id, command, create_time, parts_to_do (remaining), is_done, latest_failed_part, latest_fail_time, latest_fail_reason. There is NO parts_done / fail_count — use is_done + parts_to_do, and latest_fail_reason for failures.
-- system.replicas: database, table, is_readonly, is_session_expired, absolute_delay (lag in SECONDS), queue_size, inserts_in_queue, merges_in_queue, total_replicas, active_replicas, zookeeper_path. There is NO partitions_total / parts_active.
-- Current metric VALUES: query system.metrics or system.asynchronous_metrics — both LONG format (columns: metric, value, description). system.metric_log is WIDE (one column per metric: CurrentMetric_*, ProfileEvent_*) — do NOT SELECT metric, value FROM system.metric_log.
-- system.parts (on-disk parts): database, table, partition, active, rows, bytes_on_disk, data_compressed_bytes, modification_time, level. GROUP BY partition to see partition sizes + part counts (scanning every partition = no pruning; many parts = merge pressure).
-- system.tables (one row per table): database, table, engine, total_rows, total_bytes, partition_key, sorting_key, primary_key, engine_full, and \`as_select\` + \`create_table_query\` (the SELECT/DDL for a view). Engine tells the kind: a MergeTree-family engine = real stored data; \`View\` = NO data of its own; \`MaterializedView\` = data in a hidden inner table.
-- system.columns (one row per column): database, table, name, type, data_compressed_bytes, data_uncompressed_bytes, marks_bytes. Filter by database+table; ORDER BY data_compressed_bytes DESC to find the heaviest columns + types that should be narrower / LowCardinality.
-- system.query_log also has \`tables\` Array(String) + \`columns\` Array(String) (what a query touched) and ProfileEvents Map(String,UInt64). Use \`tables\` to learn which tables a heavy query read instead of parsing SQL.
-If a query errors with "Unknown expression identifier", re-read this list — do NOT retry random column-name variants.
+${SYSTEM_TABLE_REFERENCE}
 
 HIGH-MEMORY QUERY DEEP-DIVE — do this whenever a query eats memory beyond the norm (several GB, a large share of server memory, or a top entry in topMemoryQueries / recentHeavyQueries). Don't hand-wave "it's heavy" — gather REAL data, but stay FAST and tight:
  - SPEED RULES (important — busy clusters make query_log scans slow): the heavy queries + their peak memory are ALREADY in the overview (recentHeavyQueries: peak_gb/user/sample/runs; topMemoryQueries: memory_usage). REUSE them — do NOT re-query system.query_log for memory or query text. Inspect only the CHEAP metadata tables (system.tables / system.columns / system.parts — they read almost nothing). Deep-dive only the TOP 1–2 heaviest query shapes, ≤2 tables each. Avoid extra system.query_log queries entirely unless absolutely necessary (and then bound them with an event_time range + LIMIT).
@@ -617,5 +625,414 @@ export async function runFleetScan(opts?: {
     durationMs: Date.now() - startedAt,
     nodes: nodes.length,
     hours,
+  };
+}
+
+// ============================================
+// Single-query optimization — same Doctor-grade engine as the heavy-query
+// deep-dive, but for ONE query the operator points at (e.g. from the Query Logs
+// view). Returns a HeavyQuery-shaped result so the UI can reuse HeavyQueryCard.
+// ============================================
+
+/** One-query optimization result (mirrors a heavyQueries[] entry). */
+export interface SingleQueryOptimization {
+  node: string;
+  query: string;
+  optimizedQuery?: string;
+  peakMemory?: string;
+  user?: string;
+  cause: string;
+  tables: { name: string; engine?: string; rows?: string; note: string }[];
+  suggestions: string[];
+  estimate?: {
+    before?: { rows: number; parts: number; marks: number };
+    after?: { rows: number; parts: number; marks: number };
+  };
+}
+
+const SingleOptimizeSchema = z.object({
+  cause: z.string(),
+  tables: z.array(
+    z.object({
+      name: z.string(),
+      engine: z.string().optional(),
+      rows: z.string().optional(),
+      note: z.string(),
+    }),
+  ),
+  suggestions: z.array(z.string()),
+  optimizedQuery: z.string(),
+});
+
+const SINGLE_OPTIMIZE_PROMPT = `You optimize ONE heavy ClickHouse query. You are given the query text and its observed peak memory.
+
+Investigate FAST with the read-only \`query_node\` tool (the connectionId to use is in the user message). Inspect ONLY cheap metadata for the tables this query reads — system.tables (engine, total_rows), system.columns (types; spot the wide / high-cardinality columns), system.parts (active parts, partitioning). Do NOT scan system.query_log. Stay tight: at most ~2 tables and a few cheap lookups, then write the answer.
+
+Find WHY it eats memory (grounded in the data you gathered, never invented) and produce \`optimizedQuery\` — the optimized version with the fixes applied as concrete, runnable ClickHouse SQL using the REAL table + column names (e.g. push the date filter into the CTEs, argMax(...) instead of ROW_NUMBER() OVER(...) WHERE rn=1, filter/aggregate each side BEFORE the JOIN, LowCardinality, narrow the SELECT, max_bytes_before_external_group_by).
+
+HARD REQUIREMENTS — the optimized query MUST:
+  • return the EXACT SAME result as the original — same columns, same rows, same values (optimize only HOW data is read/computed, never WHAT it returns);
+  • keep the business logic 100% unchanged;
+  • target < 1 minute runtime and < 1 GB peak memory;
+  • be COMPLETE and VALID — reproduce every CTE / SELECT / JOIN / WHERE / GROUP BY / ORDER BY / window in full so it parses and EXPLAINs cleanly (NO "…" / "-- omitted" placeholders, never abbreviate static lists).
+
+Return JSON only: { "cause": "...", "tables": [{ "name": "db.table", "engine": "MergeTree", "rows": "2.3B", "note": "the issue" }], "suggestions": ["concrete, data-grounded", "..."], "optimizedQuery": "<the full optimized SQL>" }. Do NOT include any EXPLAIN/estimate — the system computes the before→after proof itself.
+
+${SYSTEM_TABLE_REFERENCE}`;
+
+/** Strip SQL comments + trailing semicolon so the AI and EXPLAIN see clean SQL. */
+function cleanQueryForOptimize(q: string): string {
+  return q
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/--[^\n]*/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .replace(/;\s*$/, "")
+    .trim();
+}
+
+/** Fetch the full query text (+ peak memory, user) for a query_id from system.query_log. */
+async function fetchQueryById(
+  connectionId: string,
+  queryId: string,
+): Promise<{ query: string; peakMemory?: string; user?: string } | null> {
+  try {
+    const config = await buildFleetConfig(connectionId);
+    const client = ClientManager.getInstance().getClient(config);
+    const result = await client.query({
+      query: `SELECT query, user, round(memory_usage / 1e9, 2) AS peak_gb
+              FROM system.query_log
+              WHERE query_id = {qid:String}
+                AND type IN ('QueryFinish', 'ExceptionWhileProcessing')
+              ORDER BY memory_usage DESC
+              LIMIT 1`,
+      query_params: { qid: queryId },
+      format: "JSON",
+      clickhouse_settings: { readonly: "1", max_execution_time: 15 },
+    });
+    const json = (await result.json()) as {
+      data?: { query?: string; user?: string; peak_gb?: number }[];
+    };
+    const row = json.data?.[0];
+    if (!row?.query) return null;
+    return {
+      query: String(row.query),
+      user: row.user ? String(row.user) : undefined,
+      peakMemory: row.peak_gb != null ? `${row.peak_gb} GB` : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Optimize a single query the operator points at (by query_id, or raw text).
+ * Same engine as the fleet scan's heavy-query deep-dive: a focused read-only
+ * agent gathers the tables' metadata, proposes an optimized query under the
+ * hard requirements, and the backend proves it with before→after EXPLAIN.
+ */
+export async function optimizeSingleQuery(opts: {
+  connectionId: string;
+  queryId?: string;
+  query?: string;
+  modelId?: string;
+}): Promise<SingleQueryOptimization> {
+  const config = await getConfiguration(opts.modelId);
+  const validation = validateConfiguration(config);
+  if (!validation.valid) {
+    throw AppError.badRequest(validation.error || "AI is not configured for Chouse AI");
+  }
+
+  const { connections } = await listConnections({ activeOnly: true });
+  const conn = connections.find((c) => c.id === opts.connectionId);
+  if (!conn) throw AppError.badRequest("Connection not found or inactive");
+  const node = { id: conn.id, name: conn.name };
+
+  // Get the full query — by id from query_log, or the raw text passed in.
+  let queryText = (opts.query ?? "").trim();
+  let peakMemory: string | undefined;
+  let user: string | undefined;
+  if (opts.queryId) {
+    const fetched = await fetchQueryById(opts.connectionId, opts.queryId);
+    if (fetched) {
+      queryText = fetched.query;
+      peakMemory = fetched.peakMemory;
+      user = fetched.user;
+    }
+  }
+  const cleaned = cleanQueryForOptimize(queryText);
+  if (!cleaned) throw AppError.badRequest("Could not find the query text to optimize");
+  if (!/^(select|with)\b/i.test(cleaned)) {
+    throw AppError.badRequest("Only SELECT / WITH queries can be optimized (read-only)");
+  }
+
+  const model = initializeAIModel(config!);
+  const agent = new ToolLoopAgent({
+    model,
+    instructions: `${SINGLE_OPTIMIZE_PROMPT}\n\n${CLICKHOUSE_PLAYBOOK}`,
+    tools: { query_node: queryNodeTool([node]) },
+    stopWhen: stepCountIs(8),
+    temperature: 0.1,
+    maxOutputTokens: 16000,
+  });
+
+  const messages: ModelMessage[] = [
+    {
+      role: "user",
+      content: `Node id: "${node.id}" (name: ${node.name}). Observed peak memory: ${peakMemory ?? "unknown"}. Investigate this query's tables with query_node (connectionId="${node.id}") and produce the optimized version.\n\n\`\`\`sql\n${cleaned.slice(0, 8000)}\n\`\`\``,
+    },
+  ];
+
+  let parsed: z.infer<typeof SingleOptimizeSchema> | null = null;
+  const streamResult = await agent.stream({ messages });
+  const raw = await streamResult.text;
+  try {
+    parsed = extractJson(raw, SingleOptimizeSchema);
+  } catch {
+    try {
+      const { object } = await generateObject({
+        model,
+        schema: SingleOptimizeSchema,
+        maxOutputTokens: 16000,
+        messages: [
+          { role: "system", content: SINGLE_OPTIMIZE_PROMPT },
+          {
+            role: "user",
+            content: `Query:\n\`\`\`sql\n${cleaned.slice(0, 8000)}\n\`\`\`\n\nInvestigation notes (may be empty):\n${raw || "(none)"}\n\nProduce the optimized query now.`,
+          },
+        ],
+      });
+      parsed = object;
+    } catch (e) {
+      logger.warn(
+        { module: "ChouseDoctor", err: e instanceof Error ? e.message : String(e) },
+        "Single-query optimize fallback failed",
+      );
+    }
+  }
+  if (!parsed) throw AppError.internal("Chouse AI could not optimize this query — try again.");
+
+  // before → after EXPLAIN ESTIMATE proof (read-only, plans only).
+  const [before, after] = await Promise.all([
+    explainEstimate(opts.connectionId, cleaned),
+    parsed.optimizedQuery ? explainEstimate(opts.connectionId, parsed.optimizedQuery) : Promise.resolve(null),
+  ]);
+
+  return {
+    node: node.name,
+    query: cleaned,
+    optimizedQuery: parsed.optimizedQuery,
+    peakMemory,
+    user,
+    cause: parsed.cause,
+    tables: parsed.tables,
+    suggestions: parsed.suggestions,
+    estimate: (before || after) ? { before: before ?? undefined, after: after ?? undefined } : undefined,
+  };
+}
+
+// ============================================
+// Single-error diagnosis — Chouse AI explains a system.errors entry and gives a
+// concrete SOLUTION (not an optimized query). Same read-only investigator engine.
+// ============================================
+
+/** Chouse AI's diagnosis of one server error. */
+export interface ErrorDiagnosis {
+  code?: number;
+  name: string;
+  summary: string;
+  cause: string;
+  impact: string;
+  solutions: string[];
+}
+
+const ErrorDiagnosisSchema = z.object({
+  summary: z.string(),
+  cause: z.string(),
+  impact: z.string(),
+  solutions: z.array(z.string()),
+});
+
+const ERROR_DIAGNOSE_PROMPT = `You are Chouse AI, an SRE for on-prem ClickHouse. Diagnose ONE server error from system.errors and give the operator a concrete SOLUTION (not an optimized query).
+
+You are ALREADY given the error's code, name, and last message below — do NOT re-query system.errors for them (and never ORDER system.errors BY event_time; it has no such column). Use the query_node tool (the connectionId is in the user message) read-only to investigate the underlying CAUSE: e.g. system.parts (TOO_MANY_PARTS), system.merges / system.mutations (stuck), system.replicas (replication), system.metrics / system.asynchronous_metrics (memory), system.disks (free space). Stay FAST: a few cheap lookups, then answer. Do NOT run heavy system.query_log scans.
+
+Return JSON only:
+{
+  "summary": "<one line: what this error means in plain English>",
+  "cause": "<the most likely cause, grounded in the message + what you found>",
+  "impact": "<what it affects: failed queries, ingestion, replication, server stability…>",
+  "solutions": ["<concrete, ordered step the operator can take>", "..."]
+}
+Make every solution ACTIONABLE and ClickHouse-specific — the exact setting to change, what to check, the command/SQL to run — not generic advice. Never invent table or column names.
+
+${SYSTEM_TABLE_REFERENCE}`;
+
+/**
+ * Diagnose a single server error (from system.errors) and propose a solution.
+ * Reuses the Doctor's read-only investigator: the agent may inspect system.*
+ * to ground the cause, then returns a structured diagnosis + fix steps.
+ */
+export async function diagnoseError(opts: {
+  connectionId: string;
+  code?: number;
+  name: string;
+  message?: string;
+  modelId?: string;
+}): Promise<ErrorDiagnosis> {
+  const config = await getConfiguration(opts.modelId);
+  const validation = validateConfiguration(config);
+  if (!validation.valid) {
+    throw AppError.badRequest(validation.error || "AI is not configured for Chouse AI");
+  }
+
+  const { connections } = await listConnections({ activeOnly: true });
+  const conn = connections.find((c) => c.id === opts.connectionId);
+  if (!conn) throw AppError.badRequest("Connection not found or inactive");
+  const node = { id: conn.id, name: conn.name };
+
+  const model = initializeAIModel(config!);
+  const agent = new ToolLoopAgent({
+    model,
+    instructions: `${ERROR_DIAGNOSE_PROMPT}\n\n${CLICKHOUSE_PLAYBOOK}`,
+    tools: { query_node: queryNodeTool([node]) },
+    stopWhen: stepCountIs(8),
+    temperature: 0.1,
+    maxOutputTokens: 8000,
+  });
+
+  const messages: ModelMessage[] = [
+    {
+      role: "user",
+      content: `Node id: "${node.id}" (name: ${node.name}). Diagnose this ClickHouse error and give a solution.\n\nCode: ${opts.code ?? "?"}\nName: ${opts.name}\nLast message: ${opts.message ?? "(none)"}\n\nInvestigate with query_node (connectionId="${node.id}") if useful, then return the structured diagnosis.`,
+    },
+  ];
+
+  let parsed: z.infer<typeof ErrorDiagnosisSchema> | null = null;
+  const streamResult = await agent.stream({ messages });
+  const raw = await streamResult.text;
+  try {
+    parsed = extractJson(raw, ErrorDiagnosisSchema);
+  } catch {
+    try {
+      const { object } = await generateObject({
+        model,
+        schema: ErrorDiagnosisSchema,
+        maxOutputTokens: 8000,
+        messages: [
+          { role: "system", content: ERROR_DIAGNOSE_PROMPT },
+          {
+            role: "user",
+            content: `Error — Code: ${opts.code ?? "?"}, Name: ${opts.name}, Last message: ${opts.message ?? "(none)"}.\n\nInvestigation notes (may be empty):\n${raw || "(none)"}\n\nProduce the structured diagnosis now.`,
+          },
+        ],
+      });
+      parsed = object;
+    } catch (e) {
+      logger.warn(
+        { module: "ChouseDoctor", err: e instanceof Error ? e.message : String(e) },
+        "Error diagnosis fallback failed",
+      );
+    }
+  }
+  if (!parsed) throw AppError.internal("Chouse AI could not diagnose this error — try again.");
+
+  return {
+    code: opts.code,
+    name: opts.name,
+    summary: parsed.summary,
+    cause: parsed.cause,
+    impact: parsed.impact,
+    solutions: parsed.solutions,
+  };
+}
+
+const PARTS_DIAGNOSE_PROMPT = `You are Chouse AI, an SRE for on-prem ClickHouse. Diagnose the PART / PARTITION health of ONE MergeTree table and give the operator a concrete SOLUTION.
+
+Investigate read-only with the query_node tool (the connectionId is in the user message):
+- system.parts WHERE database = '…' AND table = '…' AND active : GROUP BY partition to see the active part COUNT + sizes per partition. Many small active parts (e.g. >300 in a partition) = merge pressure / too-frequent tiny inserts; hundreds/thousands of partitions = a partition key that's too fine.
+- system.tables : engine (is it MergeTree-family?), total_rows, total_bytes, partition_key, sorting_key.
+- system.merges WHERE database = '…' AND table = '…' : merges currently running for this table.
+Stay FAST: a few cheap lookups, then answer.
+
+Then give a SOLUTION grounded in what you found: batch inserts (never 1 row per INSERT), make PARTITION BY coarser (e.g. toYYYYMM instead of toYYYYMMDD/toDate), let background merges catch up or find why they're stuck (memory), the parts_to_throw_insert / max_parts_in_total context, and when (and when NOT) to run OPTIMIZE TABLE … FINAL.
+
+Return JSON only: { "summary": "<one line>", "cause": "<grounded in the real part counts/sizes you found>", "impact": "<merge pressure, slow SELECTs, TOO_MANY_PARTS insert failures…>", "solutions": ["<concrete, ordered step>", "..."] }. Make solutions ClickHouse-specific. Never invent column names.
+
+${SYSTEM_TABLE_REFERENCE}`;
+
+/**
+ * Diagnose the part/partition health of one table (Parts tab) and propose a fix.
+ * Same read-only investigator engine; returns the structured diagnosis shape.
+ */
+export async function diagnoseParts(opts: {
+  connectionId: string;
+  database: string;
+  table: string;
+  modelId?: string;
+}): Promise<ErrorDiagnosis> {
+  const config = await getConfiguration(opts.modelId);
+  const validation = validateConfiguration(config);
+  if (!validation.valid) {
+    throw AppError.badRequest(validation.error || "AI is not configured for Chouse AI");
+  }
+
+  const { connections } = await listConnections({ activeOnly: true });
+  const conn = connections.find((c) => c.id === opts.connectionId);
+  if (!conn) throw AppError.badRequest("Connection not found or inactive");
+  const node = { id: conn.id, name: conn.name };
+
+  const model = initializeAIModel(config!);
+  const agent = new ToolLoopAgent({
+    model,
+    instructions: `${PARTS_DIAGNOSE_PROMPT}\n\n${CLICKHOUSE_PLAYBOOK}`,
+    tools: { query_node: queryNodeTool([node]) },
+    stopWhen: stepCountIs(8),
+    temperature: 0.1,
+    maxOutputTokens: 8000,
+  });
+
+  const messages: ModelMessage[] = [
+    {
+      role: "user",
+      content: `Node id: "${node.id}" (name: ${node.name}). Diagnose the part/partition health of table \`${opts.database}.${opts.table}\` and give a solution. Investigate with query_node (connectionId="${node.id}"), then return the structured diagnosis.`,
+    },
+  ];
+
+  let parsed: z.infer<typeof ErrorDiagnosisSchema> | null = null;
+  const streamResult = await agent.stream({ messages });
+  const raw = await streamResult.text;
+  try {
+    parsed = extractJson(raw, ErrorDiagnosisSchema);
+  } catch {
+    try {
+      const { object } = await generateObject({
+        model,
+        schema: ErrorDiagnosisSchema,
+        maxOutputTokens: 8000,
+        messages: [
+          { role: "system", content: PARTS_DIAGNOSE_PROMPT },
+          {
+            role: "user",
+            content: `Table ${opts.database}.${opts.table}.\n\nInvestigation notes (may be empty):\n${raw || "(none)"}\n\nProduce the structured diagnosis now.`,
+          },
+        ],
+      });
+      parsed = object;
+    } catch (e) {
+      logger.warn(
+        { module: "ChouseDoctor", err: e instanceof Error ? e.message : String(e) },
+        "Parts diagnosis fallback failed",
+      );
+    }
+  }
+  if (!parsed) throw AppError.internal("Chouse AI could not diagnose this table's parts — try again.");
+
+  return {
+    name: `${opts.database}.${opts.table}`,
+    summary: parsed.summary,
+    cause: parsed.cause,
+    impact: parsed.impact,
+    solutions: parsed.solutions,
   };
 }

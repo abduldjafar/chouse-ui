@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/select";
 import { PartLogTimelineChart } from "@/components/monitoring/PartLogTimelineChart";
 import { PaginationBar } from "@/components/monitoring/PaginationBar";
+import { AiDiagnoseButton } from "@/components/monitoring/AiDiagnoseButton";
 import { SkeletonRows } from "@/components/common/Skeletons";
+import { diagnoseTableParts } from "@/api/query";
 import { usePartLog } from "@/hooks/useMonitoringTimeline";
 import { ProjectionsView, SkipIndexesView } from "@/components/monitoring/MergeTreeObjects";
 import { cn } from "@/lib/utils";
@@ -269,9 +271,10 @@ export default function PartsPage({
                       "Duration",
                       "Rows",
                       "Size",
+                      "",
                     ].map((h, i) => (
                       <th
-                        key={h}
+                        key={h || "ai"}
                         className={cn(
                           "px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint",
                           i >= 6 ? "text-right" : "text-left"
@@ -318,6 +321,16 @@ export default function PartsPage({
                       </td>
                       <td className="px-3 py-1.5 text-right font-mono text-paper">
                         {formatBytes(r.size_in_bytes)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        <AiDiagnoseButton
+                          compact
+                          label="Diagnose"
+                          title="Diagnose parts with Chouse AI"
+                          badge={`${r.database}.${r.table}`}
+                          subtitle="Chouse AI inspects this table's parts/partitions read-only and proposes a fix (merge pressure, too many parts, partition key). Review before acting."
+                          runDiagnosis={(modelId) => diagnoseTableParts(r.database, r.table, modelId)}
+                        />
                       </td>
                     </tr>
                   ))}

@@ -4,12 +4,14 @@ import { Search, AlertTriangle, CheckCircle2, Bug, Skull, ShieldAlert } from "lu
 import { Input } from "@/components/ui/input";
 import { SkeletonRows } from "@/components/common/Skeletons";
 import { PaginationBar } from "@/components/monitoring/PaginationBar";
+import { AiDiagnoseButton } from "@/components/monitoring/AiDiagnoseButton";
 import {
   useServerErrors,
   useCrashLog,
   type ServerErrorRow,
   type CrashLogRow,
 } from "@/hooks/useMonitoringTimeline";
+import { diagnoseServerError } from "@/api/query";
 import { cn } from "@/lib/utils";
 
 type ErrorsView = "errors" | "crashes";
@@ -259,9 +261,9 @@ function ErrorsTable({ rows }: { rows: ServerErrorRow[] }) {
     <table className="w-full text-[12px]">
       <thead className="sticky top-0 z-10 bg-ink-200/90 backdrop-blur">
         <tr className="border-b border-ink-500">
-          {["Code", "Error", "Count", "Last seen", "Last message"].map((h, i) => (
+          {["Code", "Error", "Count", "Last seen", "Last message", ""].map((h, i) => (
             <th
-              key={h}
+              key={h || "ai"}
               className={cn(
                 "px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint",
                 i === 2 ? "text-right" : "text-left"
@@ -303,6 +305,17 @@ function ErrorsTable({ rows }: { rows: ServerErrorRow[] }) {
               title={e.last_error_message}
             >
               {e.last_error_message || "—"}
+            </td>
+            <td className="px-3 py-1.5 text-right">
+              <AiDiagnoseButton
+                label="Fix"
+                title="Diagnose with Chouse AI"
+                badge={`${e.code} · ${e.name}`}
+                runLabel="Diagnose & fix"
+                runDiagnosis={(modelId) =>
+                  diagnoseServerError(e.name, e.code, e.last_error_message, modelId)
+                }
+              />
             </td>
           </tr>
         ))}
