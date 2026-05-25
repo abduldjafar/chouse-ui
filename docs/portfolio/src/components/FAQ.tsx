@@ -15,7 +15,7 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "How is it different from other ClickHouse UIs?",
-    answer: "Server-side encrypted credentials, full RBAC with 6 predefined roles and granular data-access rules, and audit logging that captures the real session context. On top of that it's a multi-cluster fleet monitor with an AI SRE (Chouse AI) that diagnoses errors and writes optimized queries in place. Most tools optimize for a solo dashboard; this one optimizes for teams running clusters in production.",
+    answer: "A few tools now do AI, and a few do multi-cluster — the combination is the point. CHouse UI pairs a team access layer (app-level RBAC with 6 roles and ~40 permissions, row-level data-access rules, audit logging, and encrypted server-side credentials so the browser never sees a ClickHouse password) with an autonomous, read-only AI SRE: it runs root-cause scans, writes fixes with before→after EXPLAIN proof, and delivers RCA to Slack on an alert breach. Most UIs are a solo query workspace or a dashboard; this is a team's operations console.",
   },
   {
     question: "Why not just Grafana + a ClickHouse exporter?",
@@ -52,6 +52,10 @@ const FAQS: FaqItem[] = [
   {
     question: "What roles ship by default?",
     answer: "Six: Super Admin (priority 100), Admin (80), Developer (60), Analyst (40), Viewer (20), Guest (10). You can create custom roles with any subset of ~40 permissions, plus row-level data access rules with wildcard / regex / deny.",
+  },
+  {
+    question: "Does it use ClickHouse's own users and grants?",
+    answer: "No — it adds its own layer on top. The ClickHouse credentials are stored encrypted server-side, and access is gated by app-level roles, permissions, and data-access rules — so a team shares one workspace without each person needing a ClickHouse account or the connection password. (Some UIs instead mirror ClickHouse's native grants — simpler, but it ties UI access to CH-level users.)",
   },
   {
     question: "How does the AI Optimizer work?",
