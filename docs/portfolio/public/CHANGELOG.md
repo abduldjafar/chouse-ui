@@ -28,6 +28,7 @@ The big one: chouse-ui grows from a single-cluster console into a **multi-cluste
 - **Connection visibility fix** — `getUserConnections()` now also returns connections named by an explicit ALLOW data-access rule (user-level or via the user's roles), not only direct connection grants. Fixes cases where a user with a data-access rule to a connection still couldn't see or connect to it.
 - **docker-compose** — added `FLEET_POLLER_ENABLED` / `FLEET_POLL_INTERVAL_SECONDS`, `json-file` log rotation (10 MB × 3) on both services, and proper-length dev placeholder secrets.
 - **AI brand** — the autonomous agent is **Chouse AI** (the "ChouseD" / "Fleet Doctor" names are now internal codenames only). The existing chat bubble stays as the reactive "Ask" copilot; Chouse AI is the autonomous diagnostic surface.
+- **Login page** — removed the demo-credentials hint (`admin@localhost` / `admin123`) from the sign-in screen; the default seed login stays documented in the Quick Start instead.
 
 
 ## [v2.15.1] - 2026-05-21
