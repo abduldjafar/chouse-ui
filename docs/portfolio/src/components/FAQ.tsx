@@ -15,7 +15,15 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "How is it different from other ClickHouse UIs?",
-    answer: "Server-side encrypted credentials, full RBAC with 6 predefined roles and granular data-access rules, audit logging that captures the actual session context, and multi-connection support. Other tools optimize for solo dashboards; this one optimizes for teams that need access control.",
+    answer: "Server-side encrypted credentials, full RBAC with 6 predefined roles and granular data-access rules, and audit logging that captures the real session context. On top of that it's a multi-cluster fleet monitor with an AI SRE (Chouse AI) that diagnoses errors and writes optimized queries in place. Most tools optimize for a solo dashboard; this one optimizes for teams running clusters in production.",
+  },
+  {
+    question: "Why not just Grafana + a ClickHouse exporter?",
+    answer: "Grafana is great for dashboards, but you can't kill a runaway query from it, manage RBAC and encrypted connections, browse the schema, or get an AI root-cause analysis. CHouse UI is the operator's console — it acts on the cluster, not just graphs it. Plenty of teams run both.",
+  },
+  {
+    question: "Why not the raw clickhouse-client or the built-in play UI?",
+    answer: "They're perfect for a quick solo query. What they don't give you: multi-user RBAC, an audit trail, encrypted server-side credentials, a multi-cluster fleet view, or AI assistance. CHouse UI is the team-and-operations layer on top of ClickHouse.",
   },
   {
     question: "Is it free and open source?",
