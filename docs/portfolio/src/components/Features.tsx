@@ -4,6 +4,7 @@ import {
   Shield, Database, BarChart3, Palette, Lock, Users, FileText, Zap, Search,
   Download, Settings, Eye, Plus, Minus, Activity, Star, Sparkles, Bot, MessageSquare,
   Gauge, MemoryStick, Layers, Stethoscope, Network, SunMoon,
+  LayoutGrid, BellRing, TableProperties, Radar,
   type LucideIcon,
 } from "lucide-react";
 import { Section, Container, SectionHeader } from "./Section";
@@ -21,6 +22,18 @@ interface FeatureGroup {
 }
 
 const GROUPS: FeatureGroup[] = [
+  {
+    category: "Fleet & AI SRE",
+    icon: Radar,
+    items: [
+      { icon: LayoutGrid, title: "Fleet view", desc: "Every connection side by side — status, memory %, active queries, exceptions, and trend sparklines, with independent per-card polling" },
+      { icon: Stethoscope, title: "Chouse AI · Fleet Doctor", desc: "Autonomous read-only AI SRE — scans the fleet, pins the root cause, and writes a structured report with a heavy-query deep-dive and suggested rewrites" },
+      { icon: BellRing, title: "Threshold Alerts", desc: "Node memory %, per-query memory, and long-running queries → Slack Block Kit + email, with hysteresis to avoid flapping" },
+      { icon: Bot, title: "Autonomous RCA", desc: "On a breach, Chouse AI auto-runs a fleet scan and delivers the root-cause analysis to Slack and email" },
+      { icon: Database, title: "Snapshot poller", desc: "A backend worker caches per-cluster metrics to SQLite, so the fleet page reads one fast endpoint instead of every browser hitting every cluster live" },
+      { icon: FileText, title: "Errors page", desc: "A searchable, paginated viewer over system.errors and the crash log, so recurring server-side errors surface without ad-hoc SQL" },
+    ],
+  },
   {
     category: "AI & Automation",
     icon: Sparkles,
@@ -61,7 +74,7 @@ const GROUPS: FeatureGroup[] = [
       { icon: Activity, title: "Live Queries", desc: "Running queries with CPU time + thread count, sortable, with kill support" },
       { icon: Network, title: "Cluster Activity", desc: "Mutations, replication queue, per-replica lag, blocked-task indicators" },
       { icon: Layers, title: "Parts & Merges", desc: "system.part_log timeline of merges, mutations, downloads, removals" },
-      { icon: Stethoscope, title: "Schema Doctor", desc: "Nullable + oversized-integer lints ranked by on-disk bytes" },
+      { icon: TableProperties, title: "Schema Advisor", desc: "Nullable + oversized-integer lints ranked by on-disk bytes" },
       { icon: Zap, title: "Latency Percentiles", desc: "p50 / p95 / p99 on the query histogram, no exporter required" },
     ],
   },
@@ -98,7 +111,7 @@ export default function Features() {
           eyebrow="What's inside"
           eyebrowIndex={2}
           title="Everything you need to give ClickHouse to a team."
-          description="Six domains, one consistent UI. Click a category to expand its items."
+          description="Seven domains, one consistent UI. Click a category to expand its items."
         />
 
         <div className="mt-16 grid grid-cols-12 gap-x-6 gap-y-4">
