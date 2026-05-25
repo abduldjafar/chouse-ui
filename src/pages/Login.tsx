@@ -227,11 +227,6 @@ export default function Login() {
               </span>
             </div>
           </div>
-
-          {/* Demo creds hint (dev convenience) */}
-          <p className="mt-6 text-center font-mono text-[11px] uppercase tracking-[0.14em] text-paper-faint">
-            Demo · admin@localhost · admin123!
-          </p>
         </div>
       </div>
     </div>
