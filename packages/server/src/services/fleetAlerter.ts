@@ -395,13 +395,33 @@ const STATUS_COLOR: Record<string, string> = { healthy: "#16a34a", warning: "#d9
 const STATUS_RANK: Record<string, number> = { critical: 0, warning: 1, healthy: 2 };
 
 function rcaStatus(report: DoctorReport): string {
-  return report.analysis?.verdict.status ?? "warning";
+  if (report.analysis?.verdict.status) return report.analysis.verdict.status;
+  // Structured parse failed — recover the status from the raw JSON if present.
+  const m = (report.raw || "").match(/"status"\s*:\s*"(healthy|warning|critical)"/i);
+  return m?.[1]?.toLowerCase() ?? "warning";
+}
+
+/**
+ * Best-effort human verdict line. When the structured analysis is null (the
+ * model didn't return parseable JSON, or the report got truncated), recover the
+ * verdict summary from the raw text instead of dumping the raw fenced JSON blob
+ * into the alert — which renders especially badly in Google Chat.
+ */
+function rcaSummary(report: DoctorReport): string {
+  if (report.analysis?.verdict.summary) return report.analysis.verdict.summary;
+  const raw = report.raw || "";
+  const m = raw.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (m?.[1]) return m[1].replace(/\\"/g, '"').replace(/\\n/g, " ").trim().slice(0, 300);
+  return (
+    raw.replace(/```(?:json)?/gi, "").replace(/\s+/g, " ").trim().slice(0, 300) ||
+    "See the report in the platform."
+  );
 }
 
 async function deliverRcaSlack(report: DoctorReport, triggers: string[], slack: SlackConfig): Promise<void> {
   const status = rcaStatus(report);
   const emoji = STATUS_EMOJI[status] ?? "🟠";
-  const summary = report.analysis?.verdict.summary || report.raw.slice(0, 240) || "No structured verdict.";
+  const summary = rcaSummary(report);
   const recs = report.analysis?.recommendations?.slice(0, 3) ?? [];
   const nodes = [...(report.analysis?.nodes ?? [])]
     .filter((n) => n.status !== "healthy")
@@ -448,7 +468,7 @@ async function deliverRcaSlack(report: DoctorReport, triggers: string[], slack: 
 async function deliverRcaGoogleChat(report: DoctorReport, triggers: string[], gchat: GoogleChatConfig): Promise<void> {
   const status = rcaStatus(report);
   const emoji = STATUS_EMOJI[status] ?? "🟠";
-  const summary = report.analysis?.verdict.summary || report.raw.slice(0, 240) || "No structured verdict.";
+  const summary = rcaSummary(report);
   const recs = report.analysis?.recommendations?.slice(0, 3) ?? [];
   const nodes = [...(report.analysis?.nodes ?? [])]
     .filter((n) => n.status !== "healthy")
@@ -506,7 +526,7 @@ async function deliverRcaEmail(report: DoctorReport, triggers: string[], email: 
   });
   const status = rcaStatus(report);
   const color = STATUS_COLOR[status] ?? "#d97706";
-  const summary = report.analysis?.verdict.summary ?? "See the report in chouse-fleet.";
+  const summary = rcaSummary(report);
   const recs = report.analysis?.recommendations?.slice(0, 4) ?? [];
   const nodes = [...(report.analysis?.nodes ?? [])].filter((n) => n.status !== "healthy").slice(0, 4);
 
