@@ -9,8 +9,11 @@ export function formatBytes(bytes: number) {
   if (!bytes) return "";
   if (bytes === 0) return "0 Bytes";
   const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB"];
+  // Clamp the index — a stray ~2^63 cgroup "unlimited" sentinel that slips past
+  // a backend filter would otherwise render as e.g. "8 undefined" instead of
+  // "8 EB", which is at least honest about the order of magnitude.
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 

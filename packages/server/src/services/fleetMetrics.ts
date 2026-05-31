@@ -27,13 +27,15 @@ export const FLEET_METRICS = {
   summary: `
     SELECT
       -- OSMemoryTotal is the host RAM, but containerised / cgroup-limited
-      -- deployments may not populate it; fall back to CGroupMemoryTotal so the
-      -- card shows a real ceiling instead of a phantom 0 with a half-rendered
-      -- "X GB / " line. nullif(…, 0) coerces a "present-but-zero" value to NULL
-      -- so coalesce can move on.
+      -- deployments may not populate it; fall back to CGroupMemoryTotal. Both
+      -- subqueries filter their value at WHERE level — > 0 rejects "present
+      -- but zero", and < pow(2, 50) (1 PiB) rejects the cgroup "unlimited"
+      -- sentinel (~9.22e18 ≈ 2^63) that gets reported when no memory limit is
+      -- set. If both fall through, return 0 and let the UI render
+      -- "X used" / "—" honestly instead of a phantom ceiling.
       coalesce(
-        nullif((SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1), 0),
-        nullif((SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' LIMIT 1), 0),
+        (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+        (SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
         0
       ) AS server_memory_total_bytes,
       (SELECT value FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) AS server_memory_used_bytes,
