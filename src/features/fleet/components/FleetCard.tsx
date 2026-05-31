@@ -207,13 +207,17 @@ export default function FleetCard({
     }
   };
 
+  // Some deployments (cgroup-limited / containerised) report no OSMemoryTotal
+  // and our SQL falls back to 0 — render that honestly instead of a misleading
+  // "0%" + dangling "X GB / " (formatBytes(0) returns the empty string).
+  const hasMemoryTotal = !!effectiveSummary && effectiveSummary.memoryTotalBytes > 0;
   const memoryUsedDisplay = effectiveSummary
-    ? `${formatBytes(effectiveSummary.memoryUsedBytes)} / ${formatBytes(effectiveSummary.memoryTotalBytes)}`
+    ? hasMemoryTotal
+      ? `${formatBytes(effectiveSummary.memoryUsedBytes)} / ${formatBytes(effectiveSummary.memoryTotalBytes)}`
+      : `${formatBytes(effectiveSummary.memoryUsedBytes)} used`
     : "—";
   const memoryPercentValue = effectiveSummary?.memoryPercent ?? 0;
-  const memoryPercentDisplay = effectiveSummary
-    ? `${memoryPercentValue.toFixed(0)}%`
-    : "—";
+  const memoryPercentDisplay = hasMemoryTotal ? `${memoryPercentValue.toFixed(0)}%` : "—";
 
   return (
     <TooltipProvider delayDuration={250}>

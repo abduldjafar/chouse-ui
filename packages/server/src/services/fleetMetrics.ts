@@ -26,7 +26,16 @@ export const FLEET_METRICS = {
    */
   summary: `
     SELECT
-      (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1) AS server_memory_total_bytes,
+      -- OSMemoryTotal is the host RAM, but containerised / cgroup-limited
+      -- deployments may not populate it; fall back to CGroupMemoryTotal so the
+      -- card shows a real ceiling instead of a phantom 0 with a half-rendered
+      -- "X GB / " line. nullif(…, 0) coerces a "present-but-zero" value to NULL
+      -- so coalesce can move on.
+      coalesce(
+        nullif((SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1), 0),
+        nullif((SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' LIMIT 1), 0),
+        0
+      ) AS server_memory_total_bytes,
       (SELECT value FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) AS server_memory_used_bytes,
       -- System-wide CPU usage %. Built from the *Normalized async metrics
       -- (already divided by core count) so it's 0..100 regardless of node

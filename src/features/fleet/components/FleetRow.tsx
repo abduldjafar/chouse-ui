@@ -93,7 +93,12 @@ export default function FleetRow({
   const summary = summaryFromSnapshot(snapshot);
   const longest = longestQueryFromSnapshot(snapshot);
   const exception = lastExceptionFromSnapshot(snapshot);
-  const pct = summary ? Math.max(0, Math.min(100, summary.memoryPercent)) : null;
+  // Treat "no memory total" the same as "no summary at all" — otherwise the row
+  // shows a confident "0%" + empty bar for a node whose ceiling is unknown.
+  const pct =
+    summary && summary.memoryTotalBytes > 0
+      ? Math.max(0, Math.min(100, summary.memoryPercent))
+      : null;
   const recede = status === "healthy"; // healthy rows recede so problems pop
   const hasTrend = (memoryHistory?.filter((p) => p.value != null).length ?? 0) >= 2;
 
