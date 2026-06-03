@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [v2.17.1] - 2026-05-31
+
+A small follow-up that lands after a half-day of staring at the lab fleet on `clickhouse2.paysera.net` — a node that doesn't expose `OSMemoryTotal` the way `clickhouse-bi.paysera.net` does, and exposed three bugs sitting one behind the other on the memory display path.
+
+### Fixed
+
+- **Fleet card shows a real memory ceiling on cgroup-limited / containerised CH** — when a node hides `OSMemoryTotal` (the `/proc/meminfo` metric isn't always populated under containerisation), the card used to render `34.15 GB / ` (empty total) and a confident `0%` bar — because `formatBytes(0)` returns `""` and `memoryPercent` defaults to 0 when the denominator is 0. The summary SQL now falls through to `CGroupMemoryTotal` and then to `max_server_memory_usage` from `system.server_settings`, so cgroup-bounded processes pick up a real ceiling. When all three fall through, the card and row honestly render `X used` and `—` for the percent — never a phantom `0%`.
+- **No more "184.26 GB / 8 undefined"** — `CGroupMemoryTotal` reports the `~2^63` sentinel (≈ 9.22 × 10¹⁸) when the cgroup has no memory limit set. The fallback above happily passed that through, and `formatBytes()` only had units up to TB — so `sizes[6]` was past the end of the array and rendered the literal string `undefined`. Two small fixes: the SQL now filters `value < pow(2, 50)` (1 PiB cutoff) on both `OSMemoryTotal`-bypass paths to reject the sentinel, and `formatBytes()` extends the unit ladder to PB / EB and clamps the index so a stray sentinel that somehow slips past the backend still renders an honest order of magnitude.
+- **Monitoring → Memory tab stops disagreeing with the fleet card** — once the fleet card had a 453 GB ceiling on clickhouse2, the per-cluster Server memory breakdown card still showed "OSMemoryTotal not exposed" + a single tile, because the hook (`useServerMemoryBreakdown`) was still on the raw OSMemoryTotal subquery. The same fallback chain is now applied to every memory consumer (`useBlockedTaskSummary`, `useServerMemoryBreakdown`, `useClusterMemoryTotal`, the `useQuery` dashboard, and the backend stats endpoint in `clickhouse.ts`) — every page that shows a memory total now sees the same number. The primary `OSMemoryTotal LIMIT 1` subquery is preserved unchanged at the head of every chain; the new fallbacks only fire when it returns no row.
+- **Chouse AI stops generating CH 24.11 `NOT_AN_AGGREGATE` (code 215) on `system.parts`** — the agent was producing `SELECT partition, active, sum(rows), count() AS parts, … FROM system.parts WHERE … AND active GROUP BY partition`. CH 24.11 rejects this because `active` is in `SELECT` but neither in `GROUP BY` nor wrapped in an aggregate — and the column is redundant anyway since `WHERE active` already constrains it to 1. The shared `SYSTEM_TABLE_REFERENCE` and the `PARTS_DIAGNOSE_PROMPT` now encode CH's strict-GROUP-BY rule with the exact correct query shape inline, so the model has a template to imitate on the first attempt instead of round-tripping through a CH error.
+
+
 ## [v2.17.0] - 2026-05-28
 
 ### Added
