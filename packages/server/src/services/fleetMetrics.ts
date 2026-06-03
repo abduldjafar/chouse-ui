@@ -26,16 +26,22 @@ export const FLEET_METRICS = {
    */
   summary: `
     SELECT
-      -- OSMemoryTotal is the host RAM, but containerised / cgroup-limited
-      -- deployments may not populate it; fall back to CGroupMemoryTotal. Both
-      -- subqueries filter their value at WHERE level — > 0 rejects "present
-      -- but zero", and < pow(2, 50) (1 PiB) rejects the cgroup "unlimited"
-      -- sentinel (~9.22e18 ≈ 2^63) that gets reported when no memory limit is
-      -- set. If both fall through, return 0 and let the UI render
-      -- "X used" / "—" honestly instead of a phantom ceiling.
+      -- Primary: OSMemoryTotal — host RAM as ClickHouse sees it. Same query
+      -- the rest of the app uses (Monitoring → Memory, dashboards). When the
+      -- subquery returns no row (cgroup'd / containerised deploys that hide
+      -- /proc/meminfo or restrict system.asynchronous_metrics), coalesce
+      -- falls through to two backups so the card still has a meaningful total
+      -- instead of 0:
+      --   • CGroupMemoryTotal — filtered to reject the ~2^63 unlimited sentinel
+      --     (cgroup reports that when no memory limit is set).
+      --   • max_server_memory_usage from system.server_settings — the CH
+      --     process's operational ceiling. Only used when set explicitly
+      --     (toUInt64OrZero > 0); the 0 "auto" value is skipped.
+      -- If all three fall through, render "X used" / "—" honestly.
       coalesce(
-        (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+        (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1),
         (SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+        (SELECT toFloat64(toUInt64OrZero(value)) FROM system.server_settings WHERE name = 'max_server_memory_usage' AND toUInt64OrZero(value) > 0 AND toUInt64OrZero(value) < pow(2, 50) LIMIT 1),
         0
       ) AS server_memory_total_bytes,
       (SELECT value FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) AS server_memory_used_bytes,

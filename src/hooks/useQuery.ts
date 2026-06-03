@@ -1081,7 +1081,17 @@ export function useMetrics(
         const statsResult = await safeQuery(`
           SELECT
             (SELECT value / 1073741824 FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) as memoryUsage,
-            (SELECT value / 1073741824 FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1) as memoryTotal,
+            -- Primary: OSMemoryTotal. If absent (cgroup'd / restricted deploys),
+            -- fall back to cgroup limit (filtered to reject the ~2^63 unlimited
+            -- sentinel) then to max_server_memory_usage (only when set
+            -- explicitly). Same chain used by the fleet poller and Monitoring
+            -- → Memory card so dashboards stay consistent across pages.
+            (SELECT coalesce(
+              (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1),
+              (SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+              (SELECT toFloat64(toUInt64OrZero(value)) FROM system.server_settings WHERE name = 'max_server_memory_usage' AND toUInt64OrZero(value) > 0 AND toUInt64OrZero(value) < pow(2, 50) LIMIT 1),
+              0
+            ) / 1073741824) as memoryTotal,
             (SELECT avg(ProfileEvent_OSCPUVirtualTimeMicroseconds) / 1000000 
              FROM system.metric_log 
              WHERE event_time >= now() - INTERVAL ${interval}) as cpuLoad,

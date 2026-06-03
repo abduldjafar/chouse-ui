@@ -985,7 +985,20 @@ export function useBlockedTaskSummary(
           (SELECT count() FROM system.replicas WHERE absolute_delay > 60 OR is_readonly = 1) AS sick_replicas,
           (SELECT max(absolute_delay) FROM system.replicas) AS max_replica_lag_seconds,
           (SELECT value FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) AS server_memory_used_bytes,
-          (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1) AS server_memory_total_bytes
+          -- Primary: OSMemoryTotal as before. If that subquery returns no row
+          -- (server doesn't expose it — restricted system.asynchronous_metrics,
+          -- containerised deploy, etc.), coalesce falls through to two backup
+          -- options so the UI still has a meaningful ceiling instead of 0:
+          --   • CGroupMemoryTotal (filtered to reject the ~2^63 unlimited sentinel)
+          --   • max_server_memory_usage from system.server_settings (operational
+          --     ceiling — only used when set explicitly, not the 0 "auto" value)
+          -- If all three fall through, return 0 and let the UI render "—".
+          coalesce(
+            (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1),
+            (SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+            (SELECT toFloat64(toUInt64OrZero(value)) FROM system.server_settings WHERE name = 'max_server_memory_usage' AND toUInt64OrZero(value) > 0 AND toUInt64OrZero(value) < pow(2, 50) LIMIT 1),
+            0
+          ) AS server_memory_total_bytes
       `;
       const result = await queryApi.executeQuery(sql);
       const row = (result.data as Array<Record<string, unknown>>)[0] ?? {};
@@ -1038,7 +1051,17 @@ export function useServerMemoryBreakdown(
       // table is absent, and num(NULL) → 0 keeps the math sane.
       const sql = `
         SELECT
-          (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1) AS total_bytes,
+          -- Primary: OSMemoryTotal as before. If absent, fall back to cgroup
+          -- limit (filtered to reject the ~2^63 unlimited sentinel) and then
+          -- to max_server_memory_usage from system.server_settings (only used
+          -- when set explicitly, not the 0 "auto" value). If all fall through,
+          -- total_bytes = 0 → card switches to the RSS-only fallback layout.
+          coalesce(
+            (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1),
+            (SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+            (SELECT toFloat64(toUInt64OrZero(value)) FROM system.server_settings WHERE name = 'max_server_memory_usage' AND toUInt64OrZero(value) > 0 AND toUInt64OrZero(value) < pow(2, 50) LIMIT 1),
+            0
+          ) AS total_bytes,
           (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryAvailable' LIMIT 1) AS available_bytes,
           (SELECT value FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) AS clickhouse_rss_bytes,
           (SELECT sum(memory_usage) FROM system.processes) AS active_queries_bytes,
@@ -1693,7 +1716,16 @@ export function useClusterMemoryTotal(
     queryKey: ["clusterMemoryTotal", activeConnectionId] as const,
     queryFn: async () => {
       const result = await queryApi.executeQuery(
-        `SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1`
+        // Primary: OSMemoryTotal. Fall through to cgroup limit then CH
+        // operational ceiling if the host metric isn't exposed (cgroup'd or
+        // restricted deploys). Same fallback chain as the fleet poller +
+        // ServerMemoryBreakdown so every memory consumer sees the same total.
+        `SELECT coalesce(
+           (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1),
+           (SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+           (SELECT toFloat64(toUInt64OrZero(value)) FROM system.server_settings WHERE name = 'max_server_memory_usage' AND toUInt64OrZero(value) > 0 AND toUInt64OrZero(value) < pow(2, 50) LIMIT 1),
+           0
+         ) AS value`
       );
       const row = (result.data as Array<{ value: unknown }>)[0];
       return num(row?.value);

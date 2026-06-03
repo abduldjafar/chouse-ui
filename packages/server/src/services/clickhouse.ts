@@ -417,7 +417,16 @@ export class ClickHouseService {
           query: `
             SELECT
               (SELECT value FROM system.asynchronous_metrics WHERE metric = 'MemoryResident' LIMIT 1) as mem_resident,
-              (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1) as mem_total,
+              -- Primary: OSMemoryTotal. Fall through to cgroup limit then CH
+              -- operational ceiling for hosts that don't expose OSMemoryTotal
+              -- (containerised / locked-down system.asynchronous_metrics).
+              -- Same chain as the fleet poller + monitoring hooks.
+              coalesce(
+                (SELECT value FROM system.asynchronous_metrics WHERE metric = 'OSMemoryTotal' LIMIT 1),
+                (SELECT value FROM system.asynchronous_metrics WHERE metric = 'CGroupMemoryTotal' AND value > 0 AND value < pow(2, 50) LIMIT 1),
+                (SELECT toFloat64(toUInt64OrZero(value)) FROM system.server_settings WHERE name = 'max_server_memory_usage' AND toUInt64OrZero(value) > 0 AND toUInt64OrZero(value) < pow(2, 50) LIMIT 1),
+                0
+              ) as mem_total,
               (SELECT value FROM system.metrics WHERE metric = 'MemoryTracking' LIMIT 1) as mem_tracking
           `
         }),
