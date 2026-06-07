@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [v2.17.1] - 2026-06-07
+
+Documentation and developer experience overhaul. No app code changes.
+
+### Added
+
+- **CLAUDE.md** — project-level instructions for AI agents: key commands, tech stack, code standards summary, and a condition-based rule routing table (`when to apply each rule`)
+- **`.rules/DEAD_CODE.md`** — new rule file guiding agents on how to identify and safely remove unused imports, symbols, exports, and dependencies — both after making changes and during proactive scans
+
+### Changed
+
+- **README** condensed (~26% shorter): removed redundant overview note, replaced four environment variable tables with a short list + `.env.example` pointer, condensed the migrations section, removed the "For AI Agents" section (superseded by `CLAUDE.md`). **Built With** section rewritten to accurately reflect all dependencies (added React Router, Pino, jose, Vercel AI SDK, node-sql-parser, TanStack Table/Virtual, Recharts, uPlot, React Hook Form, Framer Motion, cmdk, DOMPurify, Radix UI; organized into Runtime/Server, Frontend, and ClickHouse sections)
+- **`.rules/CODE_CHANGES.md`** condensed (~61% shorter): removed redundant code examples, kept one example per pattern, added dead-code scan and changelog update to pre-commit checklist
+- **`.rules/CODE_REVIEWER.md`** condensed (~73% shorter): restructured as a checklist-focused format with cross-references to `CODE_CHANGES.md` instead of duplicating examples
+- **`CONTRIBUTING.md`** updated: "Using AI Tools" section now points to `CLAUDE.md` as the primary quick reference; removed the Screenshots documentation subsection
+- **GitHub Pages workflow** (`github-pages.yml`): removed the "Sync Screenshots" step
+
+### Removed
+
+- **`ARCHITECTURE.md`** — 673-line architecture reference removed; key patterns summarised inline in `CLAUDE.md`
+- **`.rules/ARCHITECTURE.md`** — rule file for maintaining `ARCHITECTURE.md`, no longer needed
+- **Screenshots** — 8 product screenshots removed from the repo (`public/screenshots/`), `docs/portfolio` screenshot gallery component (`ScreenshotGallery.tsx`), and the portfolio `sync-screenshots` build script
+
 ## [v2.17.0] - 2026-05-28
 
 ### Added

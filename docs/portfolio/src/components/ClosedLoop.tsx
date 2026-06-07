@@ -5,7 +5,7 @@ import { Section, Container } from "./Section";
 /**
  * Positioning callout — the "no context-switching" pitch. Deliberately NOT in
  * the numbered section sequence (like WhatsNew): it reads as a narrative beat
- * between the screenshots and the live playground, not a feature index.
+ * between the features and the live playground, not a feature index.
  */
 
 const EASE = [0.16, 1, 0.3, 1] as const;

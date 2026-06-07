@@ -67,30 +67,14 @@ We welcome various types of contributions:
 
 ## Using AI Tools
 
-If you're using AI coding assistants (like Cursor, GitHub Copilot, ChatGPT, etc.) to help with your contributions, **you must follow the project's coding rules**:
+If you're using AI coding assistants (like Cursor, Claude Code, GitHub Copilot, etc.) to help with your contributions, **you must follow the project's coding rules**:
 
-- **Before making changes**: Read and understand the rules in `.rules/CODE_CHANGES.md` (if available)
-- **Before submitting**: Review your changes against `.rules/CODE_REVIEWER.md` (if available)
-- Ensure your AI-generated code follows:
-  - TypeScript strict mode guidelines
-  - React best practices
-  - Proper error handling and resource cleanup
-  - Security and performance guidelines
-  - Project structure and naming conventions
+- **Quick reference**: See [`CLAUDE.md`](CLAUDE.md) at the project root for a concise overview of all standards
+- **Detailed coding rules**: [`.rules/CODE_CHANGES.md`](.rules/CODE_CHANGES.md)
+- **Review checklist**: [`.rules/CODE_REVIEWER.md`](.rules/CODE_REVIEWER.md)
 
-These rules ensure production-grade code quality and consistency. See the [README.md](README.md#for-ai-agents-and-contributors) for more details.
+These rules ensure production-grade code quality and consistency.
 
-
-## Documentation
-
-We strive to keep our documentation up-to-date and visually appealing.
-
-### Screenshots
-
-- **Directory**: Store all screenshots in `public/screenshots/`.
-- **Naming Convention**: Use kebab-case for filenames, e.g., `feature-name.png` or `metrics-dashboard.png`.
-- **Usage**: Embed images using standard Markdown syntax: `![Description](public/screenshots/feature-name.png)`.
-- **Quality**: Ensure screenshots are clear, focused, and representative of the current UI.
 
 ## Reporting Issues
 

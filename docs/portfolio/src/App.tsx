@@ -2,7 +2,6 @@ import Navbar from './components/Navbar';
 import Hero from './components/Hero';
 import WhatsNew from './components/WhatsNew';
 import Features from './components/Features';
-import ScreenshotGallery from './components/ScreenshotGallery';
 import ClosedLoop from './components/ClosedLoop';
 import TryLab from './components/TryLab';
 import Highlights from './components/Highlights';
@@ -20,7 +19,6 @@ function App() {
       <Hero />
       <WhatsNew />
       <Features />
-      <ScreenshotGallery />
       <ClosedLoop />
       <TryLab />
       <Highlights />

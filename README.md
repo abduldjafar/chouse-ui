@@ -52,8 +52,6 @@ CHouse UI provides security and access control features for teams that need:
 | **Fleet view** | Watch every cluster at once — one pane, per-card polling, status / memory / lag / exceptions, drill into any node |
 | **Chouse AI (SRE)** | Autonomous read-only diagnostics — root-cause fleet scans with history + auto-RCA to Slack/email, plus in-tab query optimization (before→after `EXPLAIN`) and error/parts diagnosis |
 
-> **Note**: Plenty of ClickHouse tools nail one piece — a query workspace, a dashboard, an AI assistant, a cluster monitor. CHouse UI is the *combination*: a team access layer (app-level RBAC, audit logging, encrypted server-side credentials) paired with multi-cluster fleet monitoring and an autonomous, read-only AI SRE that diagnoses and writes fixes. The operator's console for teams running ClickHouse in production.
-
 ---
 
 ## Features
@@ -119,38 +117,6 @@ CHouse UI provides security and access control features for teams that need:
 - **Keyboard Shortcuts** - Power user support
 
 ---
-
-## Screenshots
-
-### 🚀 SQL Workspace
-![SQL Editor](public/screenshots/sql-editor-ui.png)
-
-### ✨ Core Features
-<table width="100%">
-  <tr>
-    <td width="25%" align="center"><b>Analytics</b></td>
-    <td width="25%" align="center"><b>Optimization</b></td>
-    <td width="25%" align="center"><b>Debugging</b></td>
-    <td width="25%" align="center"><b>Visualization</b></td>
-  </tr>
-  <tr>
-    <td><img src="public/screenshots/monitoring-page.png" alt="Monitoring" /></td>
-    <td><img src="public/screenshots/ai-optimizer.png" alt="AI Optimizer" /></td>
-    <td><img src="public/screenshots/ai-debugger.png" alt="AI Debugger" /></td>
-    <td><img src="public/screenshots/explainer-feature.png" alt="Visual Explain" /></td>
-  </tr>
-</table>
-
----
-
-<details>
-<summary><b>🛠️ Management & Administration</b></summary>
-
-| Dashboard | Admin | Preferences |
-|:---:|:---:|:---:|
-| ![Home](public/screenshots/home-page.png) | ![Admin](public/screenshots/admin-page.png) | ![Prefs](public/screenshots/preference-page.png) |
-
-</details>
 
 ## Quick Start
 
@@ -241,59 +207,13 @@ ai:
 
 ### Environment Variables
 
-#### Core Settings
+All configuration options are documented in [`.env.example`](.env.example). Key required variables:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Server port | `5521` |
-| `NODE_ENV` | Environment (`development`/`production`) | `development` |
-| `CORS_ORIGIN` | Allowed CORS origins (comma-separated or `*`) | `*` |
-| `STATIC_PATH` | Path to frontend build | `./dist` |
-| `LOG_LEVEL` | Server log level: `debug`, `info`, `warn`, or `error` (JSON logs via Pino) | `info` (production), `debug` (development) |
-| `CHOUSE_CONFIG_PATH` | Path to optional YAML configuration file | - |
-
-#### RBAC Database
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RBAC_DB_TYPE` | Database type (`sqlite`/`postgres`) | `sqlite` |
-| `RBAC_SQLITE_PATH` | SQLite file path | `./data/rbac.db` |
-| `RBAC_POSTGRES_URL` | PostgreSQL connection URL (or use `DATABASE_URL`) | - |
-| `RBAC_POSTGRES_POOL_SIZE` | Connection pool size for PostgreSQL | `10` |
-
-**PostgreSQL Permissions**: When using PostgreSQL, the database user specified in `RBAC_POSTGRES_URL` must have the following permissions:
-- `CREATEDB` privilege to create the database if it doesn't exist
-- Or the database must already exist and the user must have `CONNECT` and `CREATE` privileges on it
-
-The application will automatically create the database if it doesn't exist. To grant the required permissions:
-
-```sql
--- Grant CREATEDB privilege (allows creating databases)
-ALTER USER your_user WITH CREATEDB;
-
--- Or if the database already exists, grant privileges on it
-GRANT CONNECT, CREATE ON DATABASE your_database TO your_user;
-```
-
-#### Authentication (JWT)
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `JWT_SECRET` | JWT signing secret | **Required** |
-| `JWT_ACCESS_EXPIRY` | Access token expiry (e.g., `15m`, `4h`) | `4h` |
-| `JWT_REFRESH_EXPIRY` | Refresh token expiry (e.g., `7d`) | `7d` |
-| `RBAC_ADMIN_EMAIL` | Initial admin email | `admin@localhost` |
-| `RBAC_ADMIN_USERNAME` | Initial admin username | `admin` |
-| `RBAC_ADMIN_PASSWORD` | Initial admin password | `admin123!` |
-
-#### Security & Encryption
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RBAC_ENCRYPTION_KEY` | AES-256 key for passwords (32-byte hex) | **Required** |
-| `RBAC_ENCRYPTION_SALT` | Salt for key derivation (32-byte hex) | **Required** |
-
-
+- `JWT_SECRET` — JWT signing secret (min 32 bytes) **Required**
+- `RBAC_ENCRYPTION_KEY` — AES-256 key for passwords (32-byte hex) **Required**
+- `RBAC_ENCRYPTION_SALT` — Salt for key derivation (32-byte hex) **Required**
+- `RBAC_DB_TYPE` — `sqlite` (default) or `postgres`
+- `RBAC_POSTGRES_URL` — PostgreSQL connection URL (for multi-instance deployments)
 
 ### Generating Secrets
 
@@ -410,8 +330,6 @@ graph TB
     RBAC -->|"Drizzle ORM"| DB
 ```
 
-> 📖 **[Full architecture documentation →](ARCHITECTURE.md)** — Detailed diagrams for frontend layers, backend services, RBAC subsystem, data flows, permissions catalog, and complete file structure with sizes.
-
 ---
 
 ## Security
@@ -448,103 +366,29 @@ If you discover a security vulnerability, please see [SECURITY.md](SECURITY.md) 
 
 ## Database Migrations
 
-### Automatic Migrations
-
-**Migrations run automatically on server startup.** No manual intervention required.
-
-```
-Server Start
-    │
-    ▼
-initializeRbac()
-    │
-    ├── Check current DB version
-    ├── Run pending migrations (if any)
-    └── Seed defaults (first run only)
-```
+**Migrations run automatically on server startup** — no manual intervention required.
 
 | Scenario | What Happens |
 |----------|--------------|
-| **Fresh install** | Creates full schema → Seeds roles, permissions, admin user |
-| **Version upgrade** | Detects version diff → Applies only pending migrations |
-| **Normal restart** | Version matches → No migrations needed |
+| **Fresh install** | Creates schema, seeds roles/permissions/admin user |
+| **Version upgrade** | Applies only pending migrations |
+| **Normal restart** | No migrations needed |
 
-### Manual Migration (Optional)
-
-For advanced scenarios (pre-flight checks, debugging), use CLI tools:
+### Upgrading (Docker)
 
 ```bash
-cd packages/server
-
-# Check current status and pending migrations
-bun run rbac:status
-
-# Output example:
-# Current version: 1.1.0
-# Target version: 1.2.0
-# Pending migrations:
-#   - 1.2.0: user_data_access_rules
-
-# Run migrations manually
-bun run rbac:migrate
-
-# Check version only
-bun run rbac:version
-
-# Seed default data (if missing)
-bun run rbac:seed
-
-# Reset database (⚠️ DESTRUCTIVE - deletes all data!)
-CONFIRM_RESET=yes bun run rbac:reset
-```
-
-### Upgrading CHouse UI
-
-```bash
-# 1. Pull latest version
 docker pull ghcr.io/daun-gatal/chouse-ui:latest
-
-# 2. Restart container - migrations run automatically
 docker-compose up -d
-
-# 3. Check logs for migration status
-docker logs chouse-ui | grep RBAC
+docker logs chouse-ui | grep RBAC   # verify migration status
 ```
 
-Expected output on upgrade:
-```
-[RBAC] ========================================
-[RBAC] Initializing RBAC system...
-[RBAC] Database type: sqlite
-[RBAC] App version: 1.2.0
-[RBAC] ========================================
-[RBAC] Current DB version: 1.1.0
-[RBAC] Running migration: 1.2.0 - user_data_access_rules
-[RBAC] Migration complete
-RBAC system ready
-```
-
-### Troubleshooting Migrations
-
-| Issue | Solution |
-|-------|----------|
-| Migration fails | Check logs, ensure DB is accessible |
-| Wrong permissions | Ensure volume/file ownership matches container user |
-| PostgreSQL connection | Verify `RBAC_POSTGRES_URL` is correct |
-| PostgreSQL permission denied | Ensure user has `CREATEDB` privilege or database exists with `CONNECT`/`CREATE` privileges |
-| Reset needed | Use `CONFIRM_RESET=yes bun run rbac:reset` |
+For manual migration CLI tools, see `packages/server/` scripts: `bun run rbac:status`, `bun run rbac:migrate`, `bun run rbac:seed`.
 
 ---
 
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to contribute to this project.
-
----
-
-## For AI Agents and Contributors
-
-If you're using AI coding assistants to help with contributions, please see the [Using AI Tools](CONTRIBUTING.md#using-ai-tools) section in CONTRIBUTING.md for guidelines on following the project's coding rules.
 
 ---
 
@@ -566,21 +410,34 @@ This project was initially based on **[CH-UI](https://github.com/caioricciuti/ch
 
 ### Built With
 
-#### Technologies
-- [ClickHouse](https://clickhouse.com/) - Analytics database
-- [Bun](https://bun.sh/) - JavaScript runtime
-- [Hono](https://hono.dev/) - Web framework
-- [React](https://react.dev/) - UI library
-- [Vite](https://vitejs.dev/) - Build tool
-- [Drizzle ORM](https://orm.drizzle.team/) - Database ORM
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/) - SQL editor
-- [AG Grid](https://www.ag-grid.com/) - Data grid
-- [shadcn/ui](https://ui.shadcn.com/) - UI components
-- [Tailwind CSS](https://tailwindcss.com/) - Styling
-- [Zustand](https://zustand-demo.pmnd.rs/) - State management
-- [TanStack Query](https://tanstack.com/query) - Data fetching
+#### Runtime & Server
+- [Bun](https://bun.sh/) — JavaScript runtime & package manager
+- [Hono](https://hono.dev/) — Web framework
+- [Drizzle ORM](https://orm.drizzle.team/) — Database ORM (SQLite / PostgreSQL)
+- [Pino](https://getpino.io/) — Structured JSON logging
+- [jose](https://github.com/panva/jose) — JWT signing & verification
+- [Vercel AI SDK](https://sdk.vercel.ai/) — Multi-provider AI (OpenAI, Anthropic, Google, etc.)
+- [node-sql-parser](https://github.com/taozhi8833998/node-sql-parser) — SQL parsing & validation
 
-#### AI Tools
-This project was developed with significant assistance from AI coding tools:
-- [Cursor](https://cursor.sh/) - AI-powered code editor (fork of VS Code)
-- [Google Antigravity](https://antigravity.google/) - AI-native IDE with multi-agent support
+#### Frontend
+- [React](https://react.dev/) v19 — UI library
+- [Vite](https://vitejs.dev/) v7 — Build tool
+- [React Router](https://reactrouter.com/) v7 — Routing
+- [Zustand](https://zustand-demo.pmnd.rs/) — State management
+- [TanStack Query](https://tanstack.com/query) — Data fetching & caching
+- [TanStack Table](https://tanstack.com/table) — Headless table
+- [TanStack Virtual](https://tanstack.com/virtual) — List virtualization
+- [shadcn/ui](https://ui.shadcn.com/) + [Radix UI](https://www.radix-ui.com/) — UI components
+- [Tailwind CSS](https://tailwindcss.com/) v4 — Styling
+- [Monaco Editor](https://microsoft.github.io/monaco-editor/) — SQL editor
+- [AG Grid](https://www.ag-grid.com/) — Data grid
+- [Recharts](https://recharts.org/) — Charts
+- [uPlot](https://github.com/leeoniya/uPlot) — High-performance time-series charts
+- [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/) — Forms & validation
+- [Framer Motion](https://www.framer.com/motion/) — Animations
+- [cmdk](https://cmdk.paco.me/) — Command palette
+- [DOMPurify](https://github.com/cure53/DOMPurify) — HTML sanitization
+
+#### ClickHouse
+- [@clickhouse/client](https://github.com/ClickHouse/clickhouse-js) — Server-side native client
+- [@clickhouse/client-web](https://github.com/ClickHouse/clickhouse-js) — Browser-side client
