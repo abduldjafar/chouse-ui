@@ -411,8 +411,8 @@ export class ClickHouseService {
         this.client.query({ query: "SELECT version()" }),
         this.client.query({ query: "SELECT uptime()" }),
         this.client.query({ query: "SELECT count() FROM system.databases" }),
-        this.client.query({ query: "SELECT count() FROM system.tables WHERE database NOT IN ('system', 'information_schema')" }),
-        this.client.query({ query: "SELECT formatReadableSize(sum(bytes_on_disk)) as size, sum(rows) as rows FROM system.parts WHERE active" }),
+        this.client.query({ query: "SELECT count() FROM system.tables" }),
+        this.client.query({ query: "SELECT coalesce(sum(total_bytes), 0) as size, coalesce(sum(total_rows), 0) as rows FROM system.tables" }),
         this.client.query({
           query: `
             SELECT
@@ -461,7 +461,7 @@ export class ClickHouseService {
         databaseCount: Number(dbCount.data[0]?.["count()"] || 0),
         tableCount: Number(tableCount.data[0]?.["count()"] || 0),
         totalRows: Number(sizeData.data[0]?.rows || 0),
-        totalSize: sizeData.data[0]?.size || "0 B",
+        totalSize: formatSize(Number(sizeData.data[0]?.size || 0)),
         memoryUsage: formatSize(memResident),
         memoryTotal: formatSize(memTotal),
         memoryPercentage: memTotal > 0 ? (memResident / memTotal) * 100 : 0,

@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [v2.17.4] - 2026-06-08
+
+### Fixed
+
+- **Fleet, Home, and Metrics page schema counts are now consistent** — all three now use the same canonical logic: `(SELECT count() FROM system.databases)` for databases (catches empty databases), `countIf`/`count()` against `system.tables` for tables and views (including system databases), and `sum(total_rows)`/`sum(total_bytes)` from `system.tables` for row and byte totals. Previously each page used a different query with different inclusion rules (some excluded system databases, some used `system.parts WHERE active`), causing mismatched numbers across the UI.
+
 ## [v2.17.3] - 2026-06-08
 
 ### Changed

@@ -1088,10 +1088,10 @@ export function useMetrics(
             (SELECT count() FROM system.processes) as activeQueries,
             (SELECT sum(value) FROM system.metrics WHERE metric IN ('TCPConnection', 'HTTPConnection')) as connections,
             (SELECT value FROM system.asynchronous_metrics WHERE metric = 'Uptime' LIMIT 1) as uptime,
-            (SELECT sum(rows) FROM system.parts WHERE active) as totalRows,
-            (SELECT sum(bytes_on_disk) FROM system.parts WHERE active) as totalBytes,
+            (SELECT coalesce(sum(total_rows), 0) FROM system.tables) as totalRows,
+            (SELECT coalesce(sum(total_bytes), 0) FROM system.tables) as totalBytes,
             (SELECT count() FROM system.databases) as databasesCount,
-            (SELECT count() FROM system.tables WHERE database NOT IN ('system', 'information_schema')) as tablesCount,
+            (SELECT count() FROM system.tables) as tablesCount,
             (SELECT count() FROM system.parts WHERE active) as partsCount
         `);
         if (statsResult.length > 0) {

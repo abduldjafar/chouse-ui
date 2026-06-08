@@ -89,16 +89,16 @@ export const FLEET_METRICS = {
 
   /**
    * One-row schema census for the node: how many databases, tables,
-   * views, and rows it holds (all databases, including system ones).
+   * views, rows, and bytes it holds. Uses a subquery against system.databases
+   * so empty databases (no tables yet) are still counted. All engines and
+   * databases are included — no system/information_schema exclusion — so the
+   * numbers match the Home and Metrics pages exactly.
    * Views = engine containing "View" (View + MaterializedView); everything
-   * else counts as a table. Single full aggregate over system.tables
-   * (metadata only — total_rows is a cached column, no data scan).
-   * The fleet page sums these across nodes for an at-a-glance
-   * "what's in my fleet" strip.
+   * else is a table. Metadata only — total_rows is a cached column, no scan.
    */
   schema_totals: `
     SELECT
-      count(DISTINCT database) AS databases,
+      (SELECT count() FROM system.databases) AS databases,
       countIf(engine NOT LIKE '%View%') AS tables,
       countIf(engine LIKE '%View%') AS views,
       coalesce(sum(total_rows), 0) AS rows,
