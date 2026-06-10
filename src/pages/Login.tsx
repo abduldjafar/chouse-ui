@@ -41,6 +41,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/";
+  const ssoError = searchParams.get("ssoError");
 
   const { login, isLoading, error, isAuthenticated, clearError } = useRbacStore();
   const [showPassword, setShowPassword] = useState(false);
@@ -217,13 +218,13 @@ export default function Login() {
                     )}
                   />
 
-                  {error && (
+                  {(error || ssoError) && (
                     <div
                       role="alert"
                       className="flex items-start gap-2 rounded-xs border border-red-900/60 bg-red-950/40 px-3 py-2.5 text-[13px] text-red-200"
                     >
                       <span aria-hidden className="font-mono text-red-300">!</span>
-                      <span>{error}</span>
+                      <span>{error || ssoError}</span>
                     </div>
                   )}
 

@@ -61,7 +61,7 @@ ssoRoutes.get("/:provider/start", async (c) => {
   const config = getSsoConfig();
   const provider = config.providers.get(c.req.param("provider"));
   if (!config.enabled || !provider) {
-    throw AppError.notFound("Unknown SSO provider");
+    return c.redirect("/login?ssoError=" + encodeURIComponent("Unknown SSO provider."), 302);
   }
 
   const redirect = safeRedirect(c.req.query("redirect"));
@@ -84,8 +84,12 @@ ssoRoutes.get("/:provider/start", async (c) => {
       },
       "SSO provider discovery failed"
     );
-    throw AppError.internal(
-      "SSO provider is currently unavailable. Please try again later or use password login."
+    return c.redirect(
+      "/login?ssoError=" +
+        encodeURIComponent(
+          "SSO provider is currently unavailable. Please try again later or use password login."
+        ),
+      302
     );
   }
 

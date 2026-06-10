@@ -217,20 +217,24 @@ describe("SSO Routes", () => {
       expect(setCookie).toContain("Path=/");
     });
 
-    it("returns 404 for unknown provider", async () => {
+    it("redirects to /login?ssoError= for unknown provider", async () => {
       mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
 
       const res = await app.request("/sso/unknown-provider/start");
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(302);
+      const location = res.headers.get("Location") ?? "";
+      expect(location.startsWith("/login?ssoError=")).toBe(true);
     });
 
-    it("returns 404 when SSO is disabled", async () => {
+    it("redirects to /login?ssoError= when SSO is disabled", async () => {
       mockGetSsoConfig.mockReturnValue(makeDisabledConfig());
 
       const res = await app.request(`/sso/${PROVIDER_ID}/start`);
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(302);
+      const location = res.headers.get("Location") ?? "";
+      expect(location.startsWith("/login?ssoError=")).toBe(true);
     });
 
     it("sanitizes open-redirect: ?redirect=/\\evil.com (backslash) becomes /", async () => {
@@ -518,7 +522,7 @@ describe("SSO Routes", () => {
       expect(callbackBody.data.redirect).toBe("/workspace/my-db");
     });
 
-    it("returns 500 when buildAuthorizationRedirect rejects (discovery failure)", async () => {
+    it("redirects to /login?ssoError= when buildAuthorizationRedirect rejects (discovery failure)", async () => {
       mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
       mockBuildAuthorizationRedirect.mockRejectedValue(
         new Error("OIDC discovery endpoint unreachable")
@@ -526,10 +530,11 @@ describe("SSO Routes", () => {
 
       const res = await app.request(`/sso/${PROVIDER_ID}/start`);
 
-      expect(res.status).toBe(500);
-      const body = await res.json();
-      expect(body.success).toBe(false);
-      expect(body.error.message).toContain("unavailable");
+      // Must degrade gracefully — no crash, no raw JSON 500 in the browser.
+      expect(res.status).toBe(302);
+      const location = res.headers.get("Location") ?? "";
+      expect(location.startsWith("/login?ssoError=")).toBe(true);
+      expect(decodeURIComponent(location)).toContain("unavailable");
     });
   });
 
