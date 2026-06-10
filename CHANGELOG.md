@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Changed
+
+- **Unified AI backend behind a single capability engine** — every AI feature (SQL editor optimize/debug/check, Query Logs optimize, Errors/Parts/Schema diagnose, fleet doctor scan, chat) is now described by a declarative capability in a single registry (`packages/server/src/services/ai/capabilities`) and executed by one shared engine that owns model resolution, the tool-loop agent, structured-output extraction, step collection, and error handling. This removes ~8 hand-rolled copies of the same agent loop and the duplicated JSON-extraction logic. The seven query-scoped structured capabilities are reached through a single endpoint, `POST /ai/invoke` (`{ capability, input, modelId }`); the model picker is unified to `GET /ai/models` and capability availability to `GET /ai/capabilities`. Streaming chat (`/ai-chat/stream`) and the fleet doctor scan (`/fleet/doctor/scan`) keep their dedicated routes (different auth surfaces) but now run through the same engine. The old per-feature `/query/optimize`, `/query/debug`, `/query/check-optimization`, `/query/optimize-log`, `/query/diagnose-*`, and `/query/optimize-models` routes and the `aiOptimizer`/`chouseDoctor`/`aiChat` services were removed. No user-visible behavior change; the frontend AI API functions keep the same signatures.
+
+### Fixed
+
+- **Configurable max result rows in Preferences** — a new *Query Settings* card in Preferences lets each user set a maximum row cap (100 – 500 000, default 10 000) or toggle to unlimited. The cap is enforced server-side via ClickHouse `max_result_rows` so no unnecessary bytes are downloaded. A yellow truncation banner appears inline in the results panel whenever the limit is hit, with a direct link to Preferences to raise it.
+- **Workspace SQL editor silently truncated results** — the ClickHouse client was created with `max_result_rows: 10 000` and `max_result_bytes: 10 MB` (with `result_overflow_mode: break`), causing user queries to return a partial result set with no warning (e.g. `SELECT count()` showed 1 M rows but `SELECT *` returned only ~50 k). `executeQuery` now overrides both limits to 0 (unlimited) so user-initiated queries always return the full result; the Stop button and `AbortController` are the cancellation safety net.
+- **Workspace SQL editor stuck on "Running query..."** — queries without a `LIMIT` clause caused the editor to stay in loading state indefinitely because the browser was still downloading the massive JSON response body even after ClickHouse finished executing. The fetch now carries an `AbortSignal` per tab; clicking the Stop button immediately aborts the HTTP download and clears the loading state, rather than only opening the KILL QUERY dialog. Cancellation is treated silently (no error shown) so the tab returns to idle cleanly.
+- **Monitoring — AI Diagnose dialog closes mid-analysis** — unstable row keys (`key={...-${i}}`) caused components to remount during auto-refresh; keys are now derived from stable identifiers (`part_name + event_time`, error code, `query_id`).
+- **Query Logs auto-refresh ignores toggle** — `useQueryLogs` had a hardcoded `refetchInterval: 30_000` that bypassed the UI toggle; removed so the toggle is respected.
+- **AI Diagnose / Optimize dialogs — no cancel mechanism** — closing any AI analysis dialog (via Escape, backdrop click, or ✕) now aborts the in-flight HTTP request via `AbortController`, stopping the analysis immediately rather than letting it run in the background.
+- **Workspace Explain tab — Analysis sub-tab removed** — the Analysis sub-tab and all associated dead code (`QueryAnalysisView`, `analyzeQuery` API function, server-side `/query/analyze` route, complexity/recommendation types) have been permanently deleted.
+
 ## [v2.17.4] - 2026-06-08
 
 ### Fixed

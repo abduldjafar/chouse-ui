@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   FileText,
   Search,
@@ -1596,7 +1596,7 @@ function LogsTable({
       <tbody>
         {rows.map((log, i) => (
           <LogRow
-            key={`${log.query_id}-${i}`}
+            key={log.query_id}
             log={log}
             isExpanded={expanded === log.query_id}
             onToggle={() => onToggle(log.query_id)}
@@ -2268,13 +2268,27 @@ function OptimizeWithChouseAI({
   );
   const [open, setOpen] = useState(false);
   const [modelId, setModelId] = useState<string | undefined>(undefined);
+  const abortRef = useRef<AbortController | null>(null);
   const modelsQuery = useQuery({
     queryKey: ["optimize-models"],
     queryFn: fetchOptimizeModels,
     enabled: open && canOptimize,
     staleTime: 5 * 60_000,
   });
-  const mutation = useMutation({ mutationFn: (mid?: string) => optimizeQueryFromLog(queryId, mid) });
+  const mutation = useMutation({
+    mutationFn: (mid?: string) => {
+      abortRef.current = new AbortController();
+      return optimizeQueryFromLog(queryId, mid, abortRef.current.signal);
+    },
+  });
+
+  const handleOpenChange = (value: boolean) => {
+    if (!value) {
+      abortRef.current?.abort();
+      mutation.reset();
+    }
+    setOpen(value);
+  };
 
   if (!canOptimize || !isReadOnly) return null;
 
@@ -2330,7 +2344,7 @@ function OptimizeWithChouseAI({
     <>
       {trigger}
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="flex h-[88vh] max-w-4xl flex-col overflow-hidden rounded-xs border-ink-500 bg-ink-100 p-0">
           <DialogHeader className="flex-shrink-0 border-b border-ink-500 px-6 pb-4 pt-6">
             <DialogTitle asChild>
