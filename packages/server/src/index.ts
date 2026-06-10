@@ -201,6 +201,14 @@ app.use('/api/rbac/auth/login', rateLimiter({
   keyGenerator: (c: Context) => c.req.header('X-Forwarded-For') || c.req.header('X-Real-IP') || 'unknown',
 }));
 
+// SSO callback shares the login budget: 10 attempts per 15 minutes per IP
+app.use('/api/rbac/auth/sso/*/callback', rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  keyGenerator: (c: Context) => c.req.header('X-Forwarded-For') || c.req.header('X-Real-IP') || 'unknown',
+}));
+
 // Query execution: 300 queries per minute per user
 // Applies to all query operations (select, insert, etc.)
 app.use('/api/query/*', rateLimiter({

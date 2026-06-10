@@ -1,0 +1,551 @@
+/**
+ * SSO Routes Tests
+ *
+ * Tests for /rbac/auth/sso/providers, /:provider/start, /:provider/callback
+ */
+
+import { describe, it, expect, mock, beforeEach, afterAll } from "bun:test";
+import { Hono } from "hono";
+import { errorHandler } from "../../middleware/error";
+import { signStatePayload, SSO_STATE_COOKIE, SSO_STATE_TTL_SECONDS } from "./state";
+import type { SsoConfig } from "./config";
+
+// ─── Mocks ────────────────────────────────────────────────────────────────────
+
+const mockGetSsoConfig = mock<() => SsoConfig>();
+
+mock.module("./config", () => ({
+  getSsoConfig: mockGetSsoConfig,
+}));
+
+const mockBuildAuthorizationRedirect = mock();
+const mockExchangeCodeForIdentity = mock();
+
+mock.module("./client", () => ({
+  buildAuthorizationRedirect: mockBuildAuthorizationRedirect,
+  exchangeCodeForIdentity: mockExchangeCodeForIdentity,
+}));
+
+const mockProvisionSsoUser = mock();
+
+mock.module("./service", () => ({
+  provisionSsoUser: mockProvisionSsoUser,
+}));
+
+const mockCreateAuditLogWithContext = mock(async () => {});
+
+mock.module("../services/rbac", () => ({
+  createAuditLogWithContext: mockCreateAuditLogWithContext,
+}));
+
+mock.module("../middleware/rbacAuth", () => ({
+  getClientIp: () => "127.0.0.1",
+}));
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const PROVIDER_ID = "testidp";
+const PROVIDER_DISPLAY_NAME = "Test IDP";
+
+function makeEnabledConfig(): SsoConfig {
+  return {
+    enabled: true,
+    baseUrl: "http://localhost:5173",
+    defaultRole: "viewer",
+    autoLinkByEmail: true,
+    providers: new Map([
+      [
+        PROVIDER_ID,
+        {
+          id: PROVIDER_ID,
+          displayName: PROVIDER_DISPLAY_NAME,
+          type: "oidc",
+          issuer: "https://idp.example.com",
+          clientId: "client-id",
+          clientSecret: "client-secret",
+          scopes: "openid email profile",
+        },
+      ],
+    ]),
+  };
+}
+
+function makeDisabledConfig(): SsoConfig {
+  return {
+    enabled: false,
+    baseUrl: "",
+    defaultRole: "viewer",
+    autoLinkByEmail: true,
+    providers: new Map(),
+  };
+}
+
+function buildApp(): Hono {
+  // Dynamic import after mocks are registered
+  const ssoRoutes = require("./routes").default;
+  const app = new Hono();
+  app.onError(errorHandler);
+  app.route("/sso", ssoRoutes);
+  return app;
+}
+
+// Helper: build a valid state cookie using the real signStatePayload
+async function buildStateCookie(
+  overrides: Partial<{
+    provider: string;
+    state: string;
+    nonce: string;
+    codeVerifier: string;
+    redirect: string;
+  }> = {}
+): Promise<string> {
+  return signStatePayload({
+    provider: overrides.provider ?? PROVIDER_ID,
+    state: overrides.state ?? "random-state-value",
+    nonce: overrides.nonce ?? "random-nonce-value",
+    codeVerifier: overrides.codeVerifier ?? "random-verifier-value",
+    redirect: overrides.redirect ?? "/dashboard",
+  });
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+describe("SSO Routes", () => {
+  let app: Hono;
+
+  beforeEach(() => {
+    mockGetSsoConfig.mockClear();
+    mockBuildAuthorizationRedirect.mockClear();
+    mockExchangeCodeForIdentity.mockClear();
+    mockProvisionSsoUser.mockClear();
+    mockCreateAuditLogWithContext.mockClear();
+
+    // Fresh app instance to pick up any mock changes
+    app = buildApp();
+  });
+
+  afterAll(() => {
+    mock.restore();
+  });
+
+  // ── GET /providers ─────────────────────────────────────────────────────────
+
+  describe("GET /sso/providers", () => {
+    it("returns enabled providers as [{id, displayName}] — no secrets", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const res = await app.request("/sso/providers");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.data.providers).toEqual([
+        { id: PROVIDER_ID, displayName: PROVIDER_DISPLAY_NAME },
+      ]);
+      // Ensure secrets are NOT present
+      const providerJson = JSON.stringify(body.data.providers[0]);
+      expect(providerJson).not.toContain("clientSecret");
+      expect(providerJson).not.toContain("client-secret");
+    });
+
+    it("returns empty array when SSO is disabled", async () => {
+      mockGetSsoConfig.mockReturnValue(makeDisabledConfig());
+
+      const res = await app.request("/sso/providers");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.data.providers).toEqual([]);
+    });
+  });
+
+  // ── GET /:provider/start ────────────────────────────────────────────────────
+
+  describe("GET /sso/:provider/start", () => {
+    it("redirects 302 to authorization URL", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+      mockBuildAuthorizationRedirect.mockResolvedValue({
+        url: "https://idp.example.com/authorize?response_type=code&state=abc",
+        state: "abc",
+        nonce: "nonce-val",
+        codeVerifier: "verifier-val",
+      });
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/start`);
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get("Location")).toContain("https://idp.example.com/authorize");
+    });
+
+    it("sets state cookie with correct attributes", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+      mockBuildAuthorizationRedirect.mockResolvedValue({
+        url: "https://idp.example.com/authorize?state=abc",
+        state: "abc",
+        nonce: "nonce-val",
+        codeVerifier: "verifier-val",
+      });
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/start`);
+
+      const setCookie = res.headers.get("Set-Cookie") ?? "";
+      expect(setCookie).toContain(`${SSO_STATE_COOKIE}=`);
+      expect(setCookie).toContain("HttpOnly");
+      expect(setCookie).toContain("SameSite=Lax");
+      expect(setCookie).toContain(`Max-Age=${SSO_STATE_TTL_SECONDS}`);
+      expect(setCookie).toContain("Path=/");
+    });
+
+    it("returns 404 for unknown provider", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const res = await app.request("/sso/unknown-provider/start");
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 404 when SSO is disabled", async () => {
+      mockGetSsoConfig.mockReturnValue(makeDisabledConfig());
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/start`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("sanitizes open-redirect: ?redirect=https://evil.com becomes /", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      let capturedPayloadRedirect: string | undefined;
+      mockBuildAuthorizationRedirect.mockResolvedValue({
+        url: "https://idp.example.com/authorize?state=state1",
+        state: "state1",
+        nonce: "nonce1",
+        codeVerifier: "verifier1",
+      });
+
+      // We let signStatePayload run for real, then follow through the callback
+      // to verify the redirect in the JWT payload is '/'. Simpler: because
+      // buildAuthorizationRedirect is called before signStatePayload, we can
+      // complete the start request and then do a callback with the cookie to
+      // check the redirect field in the returned data.
+      const startRes = await app.request(
+        `/sso/${PROVIDER_ID}/start?redirect=https://evil.com`
+      );
+      expect(startRes.status).toBe(302);
+
+      // Extract state cookie
+      const setCookieHeader = startRes.headers.get("Set-Cookie") ?? "";
+      const cookieMatch = setCookieHeader.match(new RegExp(`${SSO_STATE_COOKIE}=([^;]+)`));
+      expect(cookieMatch).not.toBeNull();
+      const stateCookieValue = cookieMatch![1];
+
+      // Provide callback mock and verify redirect in response payload is '/'
+      mockExchangeCodeForIdentity.mockResolvedValue({
+        provider: PROVIDER_ID,
+        subject: "sub-123",
+        email: "user@example.com",
+        emailVerified: true,
+        username: "user",
+        displayName: "User",
+        claims: {},
+      });
+      mockProvisionSsoUser.mockResolvedValue({
+        user: { id: "user-1", username: "user" },
+        tokens: { accessToken: "at", refreshToken: "rt" },
+      });
+
+      const callbackRes = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "auth-code-xyz", state: "state1" }),
+      });
+
+      expect(callbackRes.status).toBe(200);
+      const callbackBody = await callbackRes.json();
+      expect(callbackBody.data.redirect).toBe("/");
+    });
+
+    it("allows valid relative redirect path", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+      mockBuildAuthorizationRedirect.mockResolvedValue({
+        url: "https://idp.example.com/authorize?state=state2",
+        state: "state2",
+        nonce: "nonce2",
+        codeVerifier: "verifier2",
+      });
+      mockExchangeCodeForIdentity.mockResolvedValue({
+        provider: PROVIDER_ID,
+        subject: "sub-456",
+        email: "user2@example.com",
+        emailVerified: true,
+        username: "user2",
+        displayName: "User 2",
+        claims: {},
+      });
+      mockProvisionSsoUser.mockResolvedValue({
+        user: { id: "user-2", username: "user2" },
+        tokens: { accessToken: "at2", refreshToken: "rt2" },
+      });
+
+      const startRes = await app.request(
+        `/sso/${PROVIDER_ID}/start?redirect=/workspace/my-db`
+      );
+      expect(startRes.status).toBe(302);
+
+      const setCookieHeader = startRes.headers.get("Set-Cookie") ?? "";
+      const cookieMatch = setCookieHeader.match(new RegExp(`${SSO_STATE_COOKIE}=([^;]+)`));
+      const stateCookieValue = cookieMatch![1];
+
+      const callbackRes = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "auth-code", state: "state2" }),
+      });
+
+      expect(callbackRes.status).toBe(200);
+      const callbackBody = await callbackRes.json();
+      expect(callbackBody.data.redirect).toBe("/workspace/my-db");
+    });
+
+    it("returns 500 when buildAuthorizationRedirect rejects (discovery failure)", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+      mockBuildAuthorizationRedirect.mockRejectedValue(
+        new Error("OIDC discovery endpoint unreachable")
+      );
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/start`);
+
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.success).toBe(false);
+      expect(body.error.message).toContain("unavailable");
+    });
+  });
+
+  // ── POST /:provider/callback ────────────────────────────────────────────────
+
+  describe("POST /sso/:provider/callback", () => {
+    it("happy path: exchanges code, provisions user, returns user+tokens+redirect", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const stateCookieValue = await buildStateCookie({
+        state: "state-happy",
+        redirect: "/dashboard",
+      });
+      mockExchangeCodeForIdentity.mockResolvedValue({
+        provider: PROVIDER_ID,
+        subject: "sub-happy",
+        email: "happy@example.com",
+        emailVerified: true,
+        username: "happyuser",
+        displayName: "Happy User",
+        claims: {},
+      });
+      mockProvisionSsoUser.mockResolvedValue({
+        user: { id: "user-happy", username: "happyuser" },
+        tokens: { accessToken: "access-tok", refreshToken: "refresh-tok" },
+      });
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "code-happy", state: "state-happy" }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.data.user.id).toBe("user-happy");
+      expect(body.data.tokens.accessToken).toBe("access-tok");
+      expect(body.data.redirect).toBe("/dashboard");
+      expect(mockExchangeCodeForIdentity).toHaveBeenCalled();
+      expect(mockProvisionSsoUser).toHaveBeenCalled();
+      expect(mockCreateAuditLogWithContext).toHaveBeenCalledWith(
+        expect.anything(),
+        "auth.sso_login",
+        "user-happy",
+        expect.objectContaining({ status: "success" })
+      );
+    });
+
+    it("clears the state cookie on success", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const stateCookieValue = await buildStateCookie({ state: "state-clear-success" });
+      mockExchangeCodeForIdentity.mockResolvedValue({
+        provider: PROVIDER_ID,
+        subject: "sub-c",
+        email: "c@example.com",
+        emailVerified: true,
+        username: "cu",
+        displayName: "CU",
+        claims: {},
+      });
+      mockProvisionSsoUser.mockResolvedValue({
+        user: { id: "user-c", username: "cu" },
+        tokens: { accessToken: "at-c", refreshToken: "rt-c" },
+      });
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "code-c", state: "state-clear-success" }),
+      });
+
+      expect(res.status).toBe(200);
+      const setCookie = res.headers.get("Set-Cookie") ?? "";
+      // Cookie should be cleared — either Max-Age=0 or an expires in the past
+      expect(setCookie).toMatch(/Max-Age=0|expires=Thu, 01 Jan 1970/i);
+    });
+
+    it("returns 401 when state in body does not match cookie state", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const stateCookieValue = await buildStateCookie({ state: "state-real" });
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "code-x", state: "state-tampered" }),
+      });
+
+      expect(res.status).toBe(401);
+      expect(mockCreateAuditLogWithContext).toHaveBeenCalledWith(
+        expect.anything(),
+        "auth.sso_login_failed",
+        undefined,
+        expect.objectContaining({ status: "failure" })
+      );
+    });
+
+    it("clears the state cookie on failure (state mismatch)", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const stateCookieValue = await buildStateCookie({ state: "state-mismatch" });
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "code-x", state: "wrong-state" }),
+      });
+
+      expect(res.status).toBe(401);
+      const setCookie = res.headers.get("Set-Cookie") ?? "";
+      expect(setCookie).toMatch(/Max-Age=0|expires=Thu, 01 Jan 1970/i);
+    });
+
+    it("returns 401 when state cookie is missing", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "code-x", state: "some-state" }),
+      });
+
+      expect(res.status).toBe(401);
+      expect(mockCreateAuditLogWithContext).toHaveBeenCalledWith(
+        expect.anything(),
+        "auth.sso_login_failed",
+        undefined,
+        expect.objectContaining({ status: "failure" })
+      );
+    });
+
+    it("returns 404 for unknown provider", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const stateCookieValue = await buildStateCookie({ provider: "unknown-provider" });
+
+      const res = await app.request("/sso/unknown-provider/callback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "code-x", state: "some-state" }),
+      });
+
+      expect(res.status).toBe(404);
+    });
+
+    it("exchangeCodeForIdentity is called with URL containing provider+code+state", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const stateCookieValue = await buildStateCookie({
+        state: "state-verify-url",
+        nonce: "nonce-verify-url",
+        codeVerifier: "verifier-verify-url",
+        redirect: "/",
+      });
+      mockExchangeCodeForIdentity.mockResolvedValue({
+        provider: PROVIDER_ID,
+        subject: "sub-v",
+        email: "v@example.com",
+        emailVerified: true,
+        username: "vu",
+        displayName: "VU",
+        claims: {},
+      });
+      mockProvisionSsoUser.mockResolvedValue({
+        user: { id: "user-v", username: "vu" },
+        tokens: { accessToken: "at-v", refreshToken: "rt-v" },
+      });
+
+      await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `${SSO_STATE_COOKIE}=${stateCookieValue}`,
+        },
+        body: JSON.stringify({ code: "the-auth-code", state: "state-verify-url" }),
+      });
+
+      expect(mockExchangeCodeForIdentity).toHaveBeenCalled();
+      const callArgs = mockExchangeCodeForIdentity.mock.calls[0];
+      const callbackUrl: URL = callArgs[1];
+
+      // The URL passed to exchangeCodeForIdentity must contain all required params
+      expect(callbackUrl.searchParams.get("provider")).toBe(PROVIDER_ID);
+      expect(callbackUrl.searchParams.get("code")).toBe("the-auth-code");
+      expect(callbackUrl.searchParams.get("state")).toBe("state-verify-url");
+
+      // The checks object must carry the values from the cookie payload
+      const checks = callArgs[2];
+      expect(checks.codeVerifier).toBe("verifier-verify-url");
+      expect(checks.state).toBe("state-verify-url");
+      expect(checks.nonce).toBe("nonce-verify-url");
+    });
+
+    it("returns 400 when body is missing required fields", async () => {
+      mockGetSsoConfig.mockReturnValue(makeEnabledConfig());
+
+      const res = await app.request(`/sso/${PROVIDER_ID}/callback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: "" }),
+      });
+
+      expect(res.status).toBe(400);
+    });
+  });
+});
