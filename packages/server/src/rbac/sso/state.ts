@@ -7,14 +7,11 @@
  */
 
 import { SignJWT, jwtVerify } from 'jose';
+import { getJwtSecretKey } from '../services/jwt';
 
 export const SSO_STATE_COOKIE = 'chouse_sso_state';
 export const SSO_STATE_TTL_SECONDS = 600;
-
-const NODE_ENV = process.env.NODE_ENV || 'development';
-const SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || (NODE_ENV === 'production' ? '' : 'dev-jwt-secret-min-32-chars-do-not-use-in-production')
-);
+const SSO_STATE_AUDIENCE = 'chouse-sso-state';
 
 export interface SsoStatePayload {
   provider: string;
@@ -29,11 +26,14 @@ export async function signStatePayload(payload: SsoStatePayload): Promise<string
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(`${SSO_STATE_TTL_SECONDS}s`)
-    .sign(SECRET);
+    .setAudience(SSO_STATE_AUDIENCE)
+    .sign(getJwtSecretKey());
 }
 
 export async function verifyStatePayload(token: string): Promise<SsoStatePayload> {
-  const { payload } = await jwtVerify(token, SECRET);
+  const { payload } = await jwtVerify(token, getJwtSecretKey(), {
+    audience: SSO_STATE_AUDIENCE,
+  });
   const { provider, state, nonce, codeVerifier, redirect } = payload as Record<string, unknown>;
   if (
     typeof provider !== 'string' || typeof state !== 'string' ||

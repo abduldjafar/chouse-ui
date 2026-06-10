@@ -104,6 +104,9 @@ export async function exchangeCodeForIdentity(
     return normalizeOidcClaims(p.id, claims as Record<string, unknown>);
   }
 
+  // skipSubjectCheck is required: plain OAuth2 userinfo has no ID-token sub to
+  // compare against. The mapped-subject throw in applyClaimMapping is the
+  // compensating control.
   const userinfo = await oidc.fetchUserInfo(
     cfg,
     tokens.access_token,
