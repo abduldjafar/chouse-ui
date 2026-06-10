@@ -105,7 +105,7 @@ export function loadSsoConfig(env: Record<string, string | undefined> = process.
   };
   if (!enabled) return disabled;
 
-  const baseUrl = (env.AUTH_SSO_BASE_URL || '').replace(/\/$/, '');
+  const baseUrl = (env.AUTH_SSO_BASE_URL || '').trim().replace(/\/$/, '');
   if (!baseUrl) {
     throw new Error('[SSO] auth.sso.base_url (AUTH_SSO_BASE_URL) is required when SSO is enabled');
   }
@@ -127,6 +127,7 @@ export function loadSsoConfig(env: Record<string, string | undefined> = process.
   const providers = new Map<string, SsoProviderConfig>();
   for (const [id, fields] of raw) {
     const candidate: Record<string, unknown> = { ...fields };
+    if (typeof candidate.type === 'string') candidate.type = candidate.type.toLowerCase();
     if (typeof fields.claimMapping === 'string') candidate.claimMapping = parsePairs(fields.claimMapping);
     if (typeof fields.roleMapping === 'string') candidate.roleMapping = parsePairs(fields.roleMapping);
 

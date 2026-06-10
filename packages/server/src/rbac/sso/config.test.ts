@@ -94,4 +94,15 @@ describe('loadSsoConfig', () => {
     };
     expect(loadSsoConfig(env).providers.has('my_idp')).toBe(true);
   });
+
+  it('defaults autoLinkByEmail to true when unset', () => {
+    const env = baseEnv();
+    delete (env as Record<string, string | undefined>).AUTH_SSO_AUTO_LINK_BY_EMAIL;
+    expect(loadSsoConfig(env).autoLinkByEmail).toBe(true);
+  });
+
+  it('accepts uppercase provider type values', () => {
+    const env = { ...baseEnv(), AUTH_SSO_PROVIDERS_OKTA_TYPE: 'OIDC' };
+    expect(loadSsoConfig(env).providers.get('okta')!.type).toBe('oidc');
+  });
 });
