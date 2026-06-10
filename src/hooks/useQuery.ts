@@ -507,6 +507,9 @@ const QUERY_LOG_SORT_COLUMNS: Record<string, string> = {
   read_bytes: 'read_bytes',
   memory_usage: 'memory_usage',
   query_id: 'query_id',
+  // ORDER BY a SELECT alias is fine on CH 24.11; alias name doesn't shadow any
+  // source column on system.query_log so no NO_COMMON_TYPE risk.
+  cpu_cores_used: 'cpu_cores_used',
 };
 
 export interface QueryLogRange {
@@ -542,6 +545,7 @@ export function useQueryLogs(
     read_rows: number;
     read_bytes: number;
     memory_usage: number;
+    cpu_cores_used: number;
     user: string;
     rbacUser?: string | null;
     rbacUserId?: string | null;
@@ -600,6 +604,13 @@ export function useQueryLogs(
             read_rows,
             read_bytes,
             memory_usage,
+            -- Effective CPU cores used during the query (CPU time / wall clock):
+            -- ProfileEvents['OSCPUVirtualTimeMicroseconds'] is the kernel-counted
+            -- CPU microseconds across every thread CH spawned for this query;
+            -- divide by 1000 and by query_duration_ms to normalise to "cores
+            -- active during the wall-clock window". nullIf() guards against
+            -- sub-ms queries where duration is 0 → frontend renders "—".
+            ProfileEvents['OSCPUVirtualTimeMicroseconds'] / 1000.0 / nullIf(query_duration_ms, 0) AS cpu_cores_used,
             user,
             substring(exception, 1, 2000) as exception,
             Settings['log_comment'] as log_comment_json
@@ -631,6 +642,7 @@ export function useQueryLogs(
         read_rows: num(log.read_rows),
         read_bytes: num(log.read_bytes),
         memory_usage: num(log.memory_usage),
+        cpu_cores_used: num(log.cpu_cores_used),
         user: log.user,
         exception: log.exception,
         log_comment_json: log.log_comment_json,
@@ -645,6 +657,7 @@ export function useQueryLogs(
         read_rows: number;
         read_bytes: number;
         memory_usage: number;
+        cpu_cores_used: number;
         user: string;
         exception?: string;
         log_comment_json?: string;
@@ -884,6 +897,7 @@ export function useQueryLogs(
               read_rows: log.read_rows,
               read_bytes: log.read_bytes,
               memory_usage: log.memory_usage,
+              cpu_cores_used: log.cpu_cores_used,
               user: log.user,
               rbacUser: rbacUserInfo ? (rbacUserInfo.displayName || rbacUserInfo.username || rbacUserInfo.email) : (rbacUserId || undefined),
               rbacUserId: rbacUserId,
@@ -930,6 +944,7 @@ export function useQueryLogs(
           read_rows: log.read_rows,
           read_bytes: log.read_bytes,
           memory_usage: log.memory_usage,
+          cpu_cores_used: log.cpu_cores_used,
           user: log.user,
           rbacUser: undefined,
           rbacUserId: undefined,

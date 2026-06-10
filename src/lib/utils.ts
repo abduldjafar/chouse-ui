@@ -76,3 +76,19 @@ export function formatCompactNumber(number: number): string {
     maximumFractionDigits: 1,
   }).format(number);
 }
+
+/**
+ * Format an effective-cores number for the query-log tables. The metric is
+ * `ProfileEvents['OSCPUVirtualTimeMicroseconds'] / 1000 / query_duration_ms` —
+ * a Float64 that says "on average, this many CPU cores were active during the
+ * query's wall-clock duration". Tiny / zero-duration queries come back as 0 or
+ * NaN; render "—" so the column doesn't lie about a query that ran in
+ * effectively no time. Cap the displayed precision at 1 decimal for ≥ 1 core
+ * and 2 decimals below, so a 0.04 core query stays readable.
+ */
+export function formatCores(cores: number): string {
+  if (!Number.isFinite(cores) || cores <= 0) return "—";
+  if (cores < 1) return `${cores.toFixed(2)}×`;
+  if (cores < 10) return `${cores.toFixed(1)}×`;
+  return `${Math.round(cores)}×`;
+}

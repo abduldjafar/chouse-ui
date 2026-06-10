@@ -311,8 +311,29 @@ class ApiClient {
             continue;
           }
 
+          // Server payload may be either:
+          //   { success: false, error: { message, code, category, details } }   ← rich shape
+          //   { success: false, error: "plain message string" }                 ← flat shape (alert routes)
+          //   { error: "..." } / { message: "..." }                             ← misc legacy
+          // Resolve in that order so the toast never falls back to raw JSON.
+          // Cast to a permissive shape since legacy payloads don't match
+          // ApiResponse<T>'s expected error structure.
+          const errPayload = data as { error?: unknown; message?: unknown } | undefined;
+          const rawErr = errPayload?.error;
+          let resolvedMessage: string | undefined;
+          if (typeof rawErr === 'string') {
+            resolvedMessage = rawErr;
+          } else if (rawErr && typeof (rawErr as { message?: unknown }).message === 'string') {
+            resolvedMessage = (rawErr as { message: string }).message;
+          }
+          if (!resolvedMessage && typeof errPayload?.message === 'string') {
+            resolvedMessage = errPayload.message;
+          }
+          if (!resolvedMessage && typeof data === 'string') resolvedMessage = data;
+          if (!resolvedMessage) resolvedMessage = text || `Request failed (${response.status})`;
+
           const error = new ApiError(
-            data?.error?.message || (typeof data === 'string' ? data : text) || 'Request failed',
+            resolvedMessage,
             response.status,
             data?.error?.code || 'UNKNOWN_ERROR',
             data?.error?.category || 'unknown',

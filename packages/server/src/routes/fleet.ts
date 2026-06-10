@@ -67,6 +67,14 @@ type RawAlertConfig = {
   aiRcaOnBreach?: boolean;
   /** AI config id for the auto-RCA scan (blank = default model). */
   aiRcaModelId?: string;
+  /** Scheduled health report — fires every N minutes regardless of breach state. */
+  scheduledReport?: {
+    enabled?: boolean;
+    intervalMinutes?: number;
+    minQueries?: number;
+    maxRunsPerDay?: number;
+    aiModelId?: string;
+  };
 };
 
 function loadRawAlertConfig(): RawAlertConfig {
@@ -485,6 +493,13 @@ fleet.get("/alert-config", async (c) => {
         user: cfg.email?.user ?? "",
         to: cfg.email?.to ?? "",
       },
+      scheduledReport: {
+        enabled: cfg.scheduledReport?.enabled === true,
+        intervalMinutes: Number(cfg.scheduledReport?.intervalMinutes ?? 60),
+        minQueries: Number(cfg.scheduledReport?.minQueries ?? 10),
+        maxRunsPerDay: Number(cfg.scheduledReport?.maxRunsPerDay ?? 50),
+        aiModelId: cfg.scheduledReport?.aiModelId ?? null,
+      },
     },
   });
 });
@@ -510,6 +525,18 @@ const alertConfigSchema = z.object({
     .optional(),
   emailEnabled: z.boolean().optional(),
   removeEmail: z.boolean().optional(),
+  // Scheduled report — proactive periodic health summary. Interval clamped to
+  // the standard set in scheduledReporter.SCHEDULED_REPORT_INTERVALS at write
+  // time below; the schema accepts any positive int so the UI can evolve.
+  scheduledReport: z
+    .object({
+      enabled: z.boolean(),
+      intervalMinutes: z.number().int().min(1),
+      minQueries: z.number().int().min(0).optional(),
+      maxRunsPerDay: z.number().int().min(0).optional(),
+      aiModelId: z.string().optional(),
+    })
+    .optional(),
 });
 
 fleet.put("/alert-config", zValidator("json", alertConfigSchema), async (c) => {
@@ -575,6 +602,29 @@ fleet.put("/alert-config", zValidator("json", alertConfigSchema), async (c) => {
     }
   }
 
+  // Scheduled report config — clamp the interval to the supported set so the
+  // backend never has to render an arbitrary window length, then merge with
+  // what was on disk (the UI may only update some fields).
+  if (body.scheduledReport) {
+    const { SCHEDULED_REPORT_INTERVALS } = await import("../services/scheduledReporter");
+    const allowed = SCHEDULED_REPORT_INTERVALS as readonly number[];
+    const interval = allowed.includes(body.scheduledReport.intervalMinutes)
+      ? body.scheduledReport.intervalMinutes
+      : (existing.scheduledReport?.intervalMinutes ?? 60);
+    next.scheduledReport = {
+      enabled: body.scheduledReport.enabled,
+      intervalMinutes: interval,
+      minQueries:
+        body.scheduledReport.minQueries ?? existing.scheduledReport?.minQueries ?? 10,
+      maxRunsPerDay:
+        body.scheduledReport.maxRunsPerDay ?? existing.scheduledReport?.maxRunsPerDay ?? 50,
+      aiModelId: body.scheduledReport.aiModelId ?? existing.scheduledReport?.aiModelId,
+    };
+  } else if (existing.scheduledReport) {
+    // Preserve existing scheduledReport if the UI didn't touch it.
+    next.scheduledReport = existing.scheduledReport;
+  }
+
   try {
     writeFileSync(ALERT_CONFIG_PATH, JSON.stringify(next, null, 2));
   } catch (e) {
@@ -602,6 +652,105 @@ fleet.post("/alert-config/test", async (c) => {
     );
   }
 });
+
+/**
+ * Fire ONE scheduled health report on demand — for the "Send now" button in
+ * the dialog. Pick the first active connection (or the one passed in the body)
+ * and pipe the resulting payload through the configured channels. Bypasses
+ * the activity gate so empty-window tests still deliver something.
+ */
+const scheduledTestSchema = z.object({
+  connectionId: z.string().optional(),
+});
+
+fleet.post(
+  "/alert-config/scheduled/test",
+  zValidator("json", scheduledTestSchema),
+  async (c) => {
+    if (!requireSuperAdmin(c)) {
+      return c.json({ success: false, error: "Super admin required" }, 403);
+    }
+    const { connectionId } = c.req.valid("json");
+    try {
+      const { loadAlertConfig, diagnoseAlertConfig } = await import("../services/fleetAlerter");
+      const { gatherScheduledReport, deliverScheduledReport, loadScheduledReportConfig } =
+        await import("../services/scheduledReporter");
+      const alertCfg = loadAlertConfig();
+      if (!alertCfg) {
+        const d = diagnoseAlertConfig();
+        return c.json(
+          {
+            success: false,
+            error: d.ok
+              ? "Couldn't load alert config."
+              : d.reason,
+          },
+          400,
+        );
+      }
+      const srCfg = loadScheduledReportConfig(alertCfg);
+      // The UI may call this BEFORE the user has saved the scheduledReport
+      // toggle on — fall back to a sensible 60m / default model in that case
+      // so the test still works as a preview.
+      const window = srCfg?.intervalMinutes ?? 60;
+      const aiModelId = srCfg?.aiModelId;
+
+      const { listConnections } = await import("../rbac/services/connections");
+      const { connections } = await listConnections({ activeOnly: true });
+      if (connections.length === 0) {
+        return c.json(
+          {
+            success: false,
+            error:
+              "No active ClickHouse connections — add or activate one in Settings → Connections, then try again.",
+          },
+          400,
+        );
+      }
+      const conn = connectionId
+        ? connections.find((cn) => cn.id === connectionId)
+        : connections[0];
+      if (!conn) {
+        return c.json(
+          {
+            success: false,
+            error: `Connection ${connectionId} is not in the active list — refresh the page and pick another node.`,
+          },
+          404,
+        );
+      }
+
+      const payload = await gatherScheduledReport({
+        connectionId: conn.id,
+        connectionName: conn.name,
+        windowMinutes: window,
+        aiModelId,
+      });
+      const delivered = await deliverScheduledReport(payload, alertCfg);
+      return c.json({
+        success: true,
+        data: {
+          connection: conn.name,
+          windowMinutes: window,
+          totalQueries: payload.totalQueries,
+          totalErrors: payload.totalErrors,
+          suggestionsCount: payload.suggestions.length,
+          aiModel: payload.aiModel,
+          delivered,
+        },
+      });
+    } catch (e) {
+      logger.error(
+        { module: "FleetAlerter", err: e instanceof Error ? e.message : String(e) },
+        "Scheduled report test failed",
+      );
+      return c.json(
+        { success: false, error: e instanceof Error ? e.message : "Test failed" },
+        400,
+      );
+    }
+  },
+);
 
 // ============================================
 // ChouseD — AI fleet doctor (agentic health scan). Reading is gated by doctor:view;

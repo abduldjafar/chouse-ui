@@ -184,6 +184,14 @@ export interface FleetAlertConfig {
   slack: { configured: boolean; enabled: boolean };
   googleChat: { configured: boolean; enabled: boolean };
   email: { configured: boolean; enabled: boolean; user: string; to: string };
+  /** Periodic AI-enriched health report. Distinct from breach-triggered RCA. */
+  scheduledReport: {
+    enabled: boolean;
+    intervalMinutes: number;
+    minQueries: number;
+    maxRunsPerDay: number;
+    aiModelId: string | null;
+  };
 }
 
 export interface FleetAlertConfigUpdate {
@@ -204,6 +212,13 @@ export interface FleetAlertConfigUpdate {
   email?: { user: string; to: string; password?: string };
   emailEnabled?: boolean;
   removeEmail?: boolean;
+  scheduledReport?: {
+    enabled: boolean;
+    intervalMinutes: number;
+    minQueries?: number;
+    maxRunsPerDay?: number;
+    aiModelId?: string;
+  };
 }
 
 export async function fetchFleetAlertConfig(): Promise<FleetAlertConfig> {
@@ -218,6 +233,25 @@ export async function updateFleetAlertConfig(
 
 export async function testFleetAlertConfig(): Promise<{ slack: boolean; googleChat: boolean; email: boolean }> {
   return api.post<{ slack: boolean; googleChat: boolean; email: boolean }>("/fleet/alert-config/test");
+}
+
+export interface ScheduledReportTestResult {
+  connection: string;
+  windowMinutes: number;
+  totalQueries: number;
+  totalErrors: number;
+  suggestionsCount: number;
+  aiModel: string | null;
+  delivered: { slack: boolean; googleChat: boolean; email: boolean };
+}
+
+export async function testScheduledReport(
+  connectionId?: string,
+): Promise<ScheduledReportTestResult> {
+  return api.post<ScheduledReportTestResult>(
+    "/fleet/alert-config/scheduled/test",
+    connectionId ? { connectionId } : {},
+  );
 }
 
 // ============================================

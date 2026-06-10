@@ -8,8 +8,10 @@ import { AiDiagnoseButton } from "@/components/monitoring/AiDiagnoseButton";
 import {
   useServerErrors,
   useCrashLog,
+  SERVER_ERRORS_LOOKUP_DAYS,
   type ServerErrorRow,
   type CrashLogRow,
+  type ServerErrorsLookupDays,
 } from "@/hooks/useMonitoringTimeline";
 import { diagnoseServerError } from "@/api/query";
 import { cn } from "@/lib/utils";
@@ -57,9 +59,12 @@ export default function ErrorsPage({
   const [view, setView] = useState<ErrorsView>("errors");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
+  // User-attribution lookup window. 1d is fast and matches "right now"; 7d
+  // catches errors that fired earlier in the week so they're not all "—".
+  const [lookupDays, setLookupDays] = useState<ServerErrorsLookupDays>(1);
   const pageSize = 50;
 
-  const errors = useServerErrors({ enabled: view === "errors" });
+  const errors = useServerErrors(lookupDays, { enabled: view === "errors" });
   const crashes = useCrashLog({ enabled: view === "crashes" });
   const active = view === "errors" ? errors : crashes;
   const { isLoading, isFetching, error, refetch } = active;
@@ -166,6 +171,40 @@ export default function ErrorsPage({
           <div className="ml-auto flex items-center gap-4 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
             {view === "errors" ? (
               <>
+                {/* Lookup window picker — controls how far back the user
+                    attribution CTE scans system.query_log. Wider window =
+                    more codes get a user, but the scan costs more. */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-paper-dim">User lookup</span>
+                  <div
+                    role="radiogroup"
+                    aria-label="User-attribution lookup window"
+                    className="inline-flex overflow-hidden rounded-xs border border-ink-500"
+                  >
+                    {SERVER_ERRORS_LOOKUP_DAYS.map((d, idx) => {
+                      const active = lookupDays === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setLookupDays(d)}
+                          className={cn(
+                            "h-6 px-2 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand",
+                            idx > 0 && "border-l border-ink-500",
+                            active
+                              ? "bg-brand text-ink-50"
+                              : "bg-ink-100 text-paper-muted hover:bg-ink-200 hover:text-paper",
+                          )}
+                          title={`Look up users from the last ${d} ${d === 1 ? "day" : "days"}`}
+                        >
+                          {d}d
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <span>
                   Codes · <span className="text-paper">{distinctErrors.toLocaleString()}</span>
                 </span>
@@ -198,7 +237,7 @@ export default function ErrorsPage({
             ) : totalRows === 0 ? (
               <EmptyState view={view} hasSearch={!!searchTerm} />
             ) : view === "errors" ? (
-              <ErrorsTable rows={paginatedRows as ServerErrorRow[]} />
+              <ErrorsTable rows={paginatedRows as ServerErrorRow[]} lookupDays={lookupDays} />
             ) : (
               <CrashesTable rows={paginatedRows as CrashLogRow[]} />
             )}
@@ -256,20 +295,30 @@ function EmptyState({ view, hasSearch }: { view: ErrorsView; hasSearch: boolean 
   );
 }
 
-function ErrorsTable({ rows }: { rows: ServerErrorRow[] }) {
+function ErrorsTable({ rows, lookupDays }: { rows: ServerErrorRow[]; lookupDays: number }) {
+  // Column index 2 ("Count") is right-aligned; everything else is left.
+  const COLS: { label: string; align: "left" | "right" }[] = [
+    { label: "Code", align: "left" },
+    { label: "Error", align: "left" },
+    { label: "Count", align: "right" },
+    { label: "Last seen", align: "left" },
+    { label: "User", align: "left" },
+    { label: "Last message", align: "left" },
+    { label: "", align: "left" },
+  ];
   return (
     <table className="w-full text-[12px]">
       <thead className="sticky top-0 z-10 bg-ink-200/90 backdrop-blur">
         <tr className="border-b border-ink-500">
-          {["Code", "Error", "Count", "Last seen", "Last message", ""].map((h, i) => (
+          {COLS.map((c, i) => (
             <th
-              key={h || "ai"}
+              key={c.label || `col-${i}`}
               className={cn(
                 "px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint",
-                i === 2 ? "text-right" : "text-left"
+                c.align === "right" ? "text-right" : "text-left",
               )}
             >
-              {h}
+              {c.label}
             </th>
           ))}
         </tr>
@@ -293,12 +342,51 @@ function ErrorsTable({ rows }: { rows: ServerErrorRow[] }) {
                   remote
                 </span>
               )}
+              {e.source === "query_log" && (
+                <span
+                  className="ml-2 rounded-xs border border-brand/50 bg-brand/10 px-1 py-px font-mono text-[9px] uppercase tracking-[0.14em] text-brand"
+                  title={
+                    `system.errors doesn't track this code on this CH build (often the case for NETWORK_ERROR / soft errors). ` +
+                    `Count below is hits in the last ${lookupDays}d from system.query_log.`
+                  }
+                >
+                  from query_log
+                </span>
+              )}
             </td>
-            <td className="px-3 py-1.5 text-right font-mono tabular-nums text-paper">
+            <td
+              className="px-3 py-1.5 text-right font-mono tabular-nums text-paper"
+              title={
+                e.source === "query_log"
+                  ? `Hits in the last ${lookupDays} day${lookupDays === 1 ? "" : "s"}`
+                  : "Cumulative hits since server restart"
+              }
+            >
               {e.count.toLocaleString()}
             </td>
             <td className="px-3 py-1.5 font-mono text-paper-muted whitespace-nowrap">
               {e.last_error_time || "—"}
+            </td>
+            <td
+              className="px-3 py-1.5 font-mono text-paper-muted whitespace-nowrap"
+              title={
+                e.last_user
+                  ? `Most recent in the last 24h${e.affected_users > 1 ? ` · ${e.affected_users} distinct users hit this code` : ""}`
+                  : "No matching query_log row in the last 24h"
+              }
+            >
+              {e.last_user ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-paper">{e.last_user}</span>
+                  {e.affected_users > 1 && (
+                    <span className="rounded-xs border border-ink-500 bg-ink-200 px-1 py-px font-mono text-[9px] uppercase tracking-[0.14em] text-paper-faint">
+                      +{e.affected_users - 1}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                "—"
+              )}
             </td>
             <td
               className="max-w-[460px] truncate px-3 py-1.5 font-mono text-paper-muted"

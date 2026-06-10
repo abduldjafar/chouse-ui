@@ -44,8 +44,10 @@ import {
 import { useQueryLogs, usePaginationPreference, useLogsPreferences } from "@/hooks";
 import {
   useClusterMemoryTotal,
+  useClusterCpuCount,
   useQueryByTable,
   useQueryByRedashId,
+  useQueryByUser,
   useQueryPatterns,
   useQueryProfileEvents,
   useQueryViewsLog,
@@ -53,6 +55,9 @@ import {
   type ByRedashSort,
   type ByTableRow,
   type ByTableSort,
+  type ByUserGranularity,
+  type ByUserRow,
+  type ByUserSort,
   type HistogramMetric,
   type ProfileEventEntry,
   type QueryPattern,
@@ -60,9 +65,10 @@ import {
   type ViewLogRow,
 } from "@/hooks/useMonitoringTimeline";
 import { QueryHistogramChart } from "@/components/monitoring/QueryHistogramChart";
+import { UsageByUserChart, type UsageMetric } from "@/components/monitoring/UsageByUserChart";
 import { useRbacStore, RBAC_PERMISSIONS, useWorkspaceStore, genTabId } from "@/stores";
 import { useNavigate } from "react-router-dom";
-import { cn, formatCompactNumber } from "@/lib/utils";
+import { cn, formatCompactNumber, formatCores } from "@/lib/utils";
 import { DataControls } from "@/components/common/DataControls";
 import {
   Tooltip,
@@ -89,6 +95,7 @@ interface LogEntry {
   read_rows: number;
   read_bytes: number;
   memory_usage: number;
+  cpu_cores_used: number;
   user: string;
   rbacUser?: string | null;
   rbacUserId?: string | null;
@@ -375,8 +382,13 @@ export default function LogsPage({
       )
     : timeRangeHours;
 
-  // Sub-view inside Logs — flat query list, aggregated patterns, by-table, by-redash, or histogram.
-  const [view, setView] = useState<"queries" | "patterns" | "tables" | "redash" | "histogram">("queries");
+  // Sub-view inside Logs — flat query list, aggregated patterns, by-table,
+  // by-redash, by-user (CPU + memory distribution chart), or histogram.
+  const [view, setView] = useState<"queries" | "patterns" | "tables" | "redash" | "users" | "histogram">("queries");
+  // By-user tab state — granularity (day/month/year) + metric (CPU/memory/etc).
+  const [byUserGranularity, setByUserGranularity] = useState<ByUserGranularity>("day");
+  const [byUserMetric, setByUserMetric] = useState<UsageMetric>("total_cpu_seconds");
+  const [byUserSortBy, setByUserSortBy] = useState<ByUserSort>("total_cpu_seconds");
   const [histogramMetric, setHistogramMetric] = useState<HistogramMetric>("duration");
   const [patternSort, setPatternSort] = useState<QueryPatternSort>("total_duration_ms");
   const [patternPage, setPatternPage] = useState(0);
@@ -483,6 +495,58 @@ export default function LogsPage({
     () => byRedash.slice(byRedashStart, byRedashEnd),
     [byRedash, byRedashStart, byRedashEnd]
   );
+
+  // By-user breakdown table. Scope (daysBack) follows the chart's granularity
+  // so the table mirrors what the chart shows. The chart pulls its OWN copy
+  // via useQueryByUser internally; both hooks share the same query key so
+  // TanStack Query dedupes the fetch.
+  const byUserScope =
+    byUserGranularity === "year"
+      ? 365 * 5
+      : byUserGranularity === "month"
+        ? 365
+        : 30;
+  const {
+    data: byUserRows = [],
+    isLoading: byUserLoading,
+    error: byUserError,
+  } = useQueryByUser(
+    byUserGranularity,
+    byUserScope,
+    byUserSortBy,
+    10_000,
+    { enabled: view === "users" },
+  );
+
+  // Aggregate the bucket-level rows into one row per user for the breakdown
+  // table — sum / max across all buckets in the selected scope. Sorted by the
+  // active sort key in the parent component below.
+  const byUserAggregated = useMemo(() => {
+    const acc = new Map<string, ByUserRow & { bucket_count: number }>();
+    for (const r of byUserRows) {
+      const existing = acc.get(r.user);
+      if (!existing) {
+        acc.set(r.user, { ...r, bucket_count: 1 });
+        continue;
+      }
+      existing.queries += r.queries;
+      existing.total_cpu_seconds += r.total_cpu_seconds;
+      existing.total_memory_bytes += r.total_memory_bytes;
+      existing.peak_memory_bytes = Math.max(existing.peak_memory_bytes, r.peak_memory_bytes);
+      existing.total_read_bytes += r.total_read_bytes;
+      existing.total_duration_ms += r.total_duration_ms;
+      // avg_cores: weighted by queries so the rollup matches what a
+      // single GROUP BY user would have produced.
+      existing.avg_cores =
+        (existing.avg_cores * existing.bucket_count + r.avg_cores) /
+        (existing.bucket_count + 1);
+      existing.bucket_count += 1;
+    }
+    const sorted = Array.from(acc.values()).sort(
+      (a, b) => (b[byUserSortBy] as number) - (a[byUserSortBy] as number),
+    );
+    return sorted;
+  }, [byUserRows, byUserSortBy]);
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -925,7 +989,7 @@ export default function LogsPage({
               Bucket · {bucket}
             </span>
 
-            {view !== "histogram" && (
+            {view !== "histogram" && view !== "users" && (
               <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
                 Total ·{" "}
                 {(view === "patterns"
@@ -934,6 +998,11 @@ export default function LogsPage({
                     ? byTableTotalRows
                     : totalRows
                 ).toLocaleString()}
+              </span>
+            )}
+            {view === "users" && (
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
+                {byUserAggregated.length} users · {byUserRows.length.toLocaleString()} buckets
               </span>
             )}
           </div>
@@ -966,6 +1035,7 @@ export default function LogsPage({
             { id: "patterns", label: "Patterns", hint: "Grouped by query shape" },
             { id: "tables", label: "By table", hint: "Hot tables" },
             { id: "redash", label: "By Redash", hint: "Grouped by Redash query_id" },
+            { id: "users", label: "By user", hint: "CPU + memory distribution per user" },
             { id: "histogram", label: "Histogram", hint: "Metric distribution" },
           ].map((tab) => {
             const active = view === tab.id;
@@ -1005,6 +1075,56 @@ export default function LogsPage({
               metric={histogramMetric}
               onMetricChange={setHistogramMetric}
             />
+          </div>
+        ) : view === "users" ? (
+          <div className="flex flex-1 min-h-0 flex-col gap-4 overflow-auto">
+            <UsageByUserChart
+              granularity={byUserGranularity}
+              onGranularityChange={setByUserGranularity}
+              metric={byUserMetric}
+              onMetricChange={(m) => {
+                setByUserMetric(m);
+                // Keep the table's sort in sync with the chart metric so the
+                // top row of the table is always the top wedge of the chart.
+                if (m === "total_cpu_seconds") setByUserSortBy("total_cpu_seconds");
+                else if (m === "peak_memory_bytes") setByUserSortBy("peak_memory_bytes");
+                else if (m === "total_memory_bytes") setByUserSortBy("total_memory_bytes");
+                else if (m === "queries") setByUserSortBy("queries");
+              }}
+            />
+            <div className="flex flex-col overflow-hidden rounded-md border border-ink-500 bg-ink-100">
+              <div className="flex-1 overflow-auto">
+                {byUserLoading ? (
+                  <table className="w-full">
+                    <tbody>
+                      <SkeletonRows count={8} cols={7} />
+                    </tbody>
+                  </table>
+                ) : byUserError ? (
+                  <div className="flex h-48 flex-col items-center justify-center gap-2 px-4 text-center">
+                    <span className="text-[13px] text-paper">Couldn't load by-user rollup</span>
+                    <span className="text-[12px] text-paper-muted">{byUserError.message}</span>
+                  </div>
+                ) : byUserAggregated.length === 0 ? (
+                  <div className="flex h-48 flex-col items-center justify-center gap-2 px-4 text-center">
+                    <span className="grid h-12 w-12 place-items-center rounded-xs border border-ink-500 bg-ink-200 text-paper-dim">
+                      <FileText className="h-5 w-5" aria-hidden />
+                    </span>
+                    <span className="text-[13px] text-paper">No user activity</span>
+                    <span className="text-[12px] text-paper-muted">
+                      Widen the scope (try a longer granularity) — needs queries from named users.
+                    </span>
+                  </div>
+                ) : (
+                  <ByUserTable
+                    rows={byUserAggregated}
+                    sortKey={byUserSortBy}
+                    onSort={setByUserSortBy}
+                    clusterMemoryBytes={clusterMemoryBytes}
+                  />
+                )}
+              </div>
+            </div>
           </div>
         ) : (
         <div className="flex flex-1 min-h-0 flex-col overflow-hidden rounded-md border border-ink-500 bg-ink-100">
@@ -1443,6 +1563,7 @@ type SortKey =
   | "read_rows"
   | "read_bytes"
   | "memory_usage"
+  | "cpu_cores_used"
   | "query_id";
 
 interface ColumnSpec {
@@ -1462,6 +1583,7 @@ const COLUMNS: ColumnSpec[] = [
   { key: "read_rows", label: "Read rows", align: "right", w: "w-[96px]" },
   { key: "read_bytes", label: "Read bytes", align: "right", w: "w-[96px]" },
   { key: "memory_usage", label: "Memory", align: "right", w: "w-[96px]" },
+  { key: "cpu_cores_used", label: "Cores", align: "right", w: "w-[104px]" },
   { key: "query_id", label: "Query ID", align: "left", w: "w-[110px]" },
 ];
 
@@ -1482,6 +1604,8 @@ function sortLogs(rows: LogEntry[], key: SortKey, dir: "asc" | "desc"): LogEntry
         return mult * (a.read_bytes - b.read_bytes);
       case "memory_usage":
         return mult * (a.memory_usage - b.memory_usage);
+      case "cpu_cores_used":
+        return mult * (a.cpu_cores_used - b.cpu_cores_used);
       case "query":
         return mult * (a.query || "").localeCompare(b.query || "");
       case "user": {
@@ -1629,6 +1753,7 @@ const PATTERN_COLUMNS: PatternColumn[] = [
   { key: "avg_duration_ms", label: "Avg dur", align: "right", w: "w-[88px]" },
   { key: "total_duration_ms", label: "Total dur", align: "right", w: "w-[100px]" },
   { key: "max_memory", label: "Max mem", align: "right", w: "w-[92px]" },
+  { key: "avg_cores_used", label: "Cores", align: "right", w: "w-[104px]" },
   { key: "total_read_rows", label: "Read rows", align: "right", w: "w-[112px]" },
   { key: "total_read_bytes", label: "Read bytes", align: "right", w: "w-[108px]" },
 ];
@@ -1749,6 +1874,9 @@ function PatternRow({ pattern, clusterMemoryBytes }: PatternRowProps) {
           ratioPct={memRatioPct}
         />
       </td>
+      <td className="px-3 py-1.5 text-right font-mono">
+        <CpuCoresCell cores={pattern.avg_cores_used} />
+      </td>
       <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
         {pattern.total_read_rows.toLocaleString()}
       </td>
@@ -1778,6 +1906,7 @@ const BY_TABLE_COLUMNS: ByTableColumn[] = [
   { key: "total_read_rows", label: "Read rows", align: "right", w: "w-[112px]" },
   { key: "total_read_bytes", label: "Read bytes", align: "right", w: "w-[108px]" },
   { key: "max_memory", label: "Max mem", align: "right", w: "w-[92px]" },
+  { key: "avg_cores_used", label: "Cores", align: "right", w: "w-[104px]" },
 ];
 
 interface ByTableTableProps {
@@ -1889,6 +2018,9 @@ function ByTableTableRow({
           ratioPct={memRatioPct}
         />
       </td>
+      <td className="px-3 py-1.5 text-right font-mono">
+        <CpuCoresCell cores={row.avg_cores_used} />
+      </td>
     </tr>
   );
 }
@@ -1919,6 +2051,7 @@ const BY_REDASH_COLUMNS: ByRedashColumn[] = [
   { key: "total_duration_ms", label: "Total dur", align: "right", w: "w-[100px]" },
   { key: "min_memory", label: "Min mem", align: "right", w: "w-[80px]" },
   { key: "max_memory", label: "Max mem", align: "right", w: "w-[92px]" },
+  { key: "avg_cores_used", label: "Cores", align: "right", w: "w-[104px]" },
   { key: "total_read_rows", label: "Read rows", align: "right", w: "w-[112px]" },
   { key: "total_read_bytes", label: "Read bytes", align: "right", w: "w-[108px]" },
 ];
@@ -2043,11 +2176,157 @@ function ByRedashTableRow({
           ratioPct={memRatioPct}
         />
       </td>
+      <td className="px-3 py-1.5 text-right font-mono">
+        <CpuCoresCell cores={row.avg_cores_used} />
+      </td>
       <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
         {row.total_read_rows.toLocaleString()}
       </td>
       <td className="px-3 py-1.5 text-right font-mono text-paper-muted">
         {formatBytes(row.total_read_bytes)}
+      </td>
+    </tr>
+  );
+}
+
+/* ============================================================
+   By User table — breakdown beneath the UsageByUserChart.
+   Aggregates the (bucket, user) rows into one line per user;
+   columns mirror the chart's metric options + the established
+   memory/cores cells from the other tabs.
+   ============================================================ */
+
+interface ByUserColumn {
+  key: ByUserSort | null;
+  label: string;
+  align: "left" | "right";
+  w?: string;
+}
+
+const BY_USER_COLUMNS: ByUserColumn[] = [
+  { key: null, label: "User", align: "left" },
+  { key: "queries", label: "Queries", align: "right", w: "w-[88px]" },
+  { key: "total_cpu_seconds", label: "Total CPU", align: "right", w: "w-[104px]" },
+  { key: "avg_cores", label: "Avg cores", align: "right", w: "w-[104px]" },
+  { key: "peak_memory_bytes", label: "Peak mem", align: "right", w: "w-[100px]" },
+  { key: "total_memory_bytes", label: "Σ mem", align: "right", w: "w-[100px]" },
+  { key: "total_read_bytes", label: "Read bytes", align: "right", w: "w-[108px]" },
+  { key: "total_duration_ms", label: "Σ duration", align: "right", w: "w-[100px]" },
+];
+
+interface ByUserTableProps {
+  rows: ByUserRow[];
+  sortKey: ByUserSort;
+  onSort: (key: ByUserSort) => void;
+  clusterMemoryBytes: number;
+}
+
+function ByUserTable({ rows, sortKey, onSort, clusterMemoryBytes }: ByUserTableProps) {
+  return (
+    <TooltipProvider delayDuration={300}>
+      <table className="w-full text-[12px]">
+        <thead className="sticky top-0 z-10 bg-ink-200/90 backdrop-blur">
+          <tr className="border-b border-ink-500">
+            {BY_USER_COLUMNS.map((c, i) => {
+              const isActive = c.key !== null && c.key === sortKey;
+              const sortable = c.key !== null;
+              return (
+                <th
+                  key={`${c.label}-${i}`}
+                  className={cn(
+                    "px-3 py-2 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint",
+                    c.align === "right" ? "text-right" : "text-left",
+                    c.w,
+                  )}
+                >
+                  {sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => onSort(c.key as ByUserSort)}
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-xs transition-colors hover:text-paper",
+                        c.align === "right" && "flex-row-reverse",
+                        isActive && "text-brand",
+                      )}
+                      aria-label={`Sort by ${c.label}`}
+                    >
+                      <span>{c.label}</span>
+                      {isActive ? (
+                        <ArrowDown className="h-3 w-3" aria-hidden />
+                      ) : (
+                        <ArrowUpDown className="h-2.5 w-2.5 opacity-40" aria-hidden />
+                      )}
+                    </button>
+                  ) : (
+                    c.label
+                  )}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <ByUserTableRow
+              key={`${r.user}-${i}`}
+              row={r}
+              clusterMemoryBytes={clusterMemoryBytes}
+            />
+          ))}
+        </tbody>
+      </table>
+    </TooltipProvider>
+  );
+}
+
+function fmtCpuSeconds(s: number): string {
+  if (!Number.isFinite(s) || s <= 0) return "0";
+  if (s < 60) return `${s.toFixed(1)}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+}
+
+function ByUserTableRow({
+  row,
+  clusterMemoryBytes,
+}: {
+  row: ByUserRow;
+  clusterMemoryBytes: number;
+}) {
+  const memTier = memoryTier(row.peak_memory_bytes, clusterMemoryBytes);
+  const memRatioPct =
+    clusterMemoryBytes > 0 ? (row.peak_memory_bytes / clusterMemoryBytes) * 100 : 0;
+
+  return (
+    <tr className="border-b border-ink-500/60 transition-colors hover:bg-ink-200/60">
+      <td className="px-3 py-1.5 font-mono">
+        <span className="text-paper">{row.user || "(empty)"}</span>
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-paper">
+        {row.queries.toLocaleString()}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-paper">
+        {fmtCpuSeconds(row.total_cpu_seconds)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono">
+        <CpuCoresCell cores={row.avg_cores} />
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono">
+        <MemoryCell
+          bytes={row.peak_memory_bytes}
+          tier={memTier}
+          ratioPct={memRatioPct}
+        />
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-paper-muted">
+        {formatBytes(row.total_memory_bytes)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-paper-muted">
+        {formatBytes(row.total_read_bytes)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-paper-muted">
+        {fmtCpuSeconds(row.total_duration_ms / 1000)}
       </td>
     </tr>
   );
@@ -2212,6 +2491,9 @@ function LogRow({
             tier={memTier}
             ratioPct={memRatioPct}
           />
+        </td>
+        <td className="px-3 py-1.5 text-right font-mono">
+          <CpuCoresCell cores={log.cpu_cores_used} />
         </td>
         <td
           className="px-3 py-1.5 font-mono text-paper-faint truncate"
@@ -2738,6 +3020,73 @@ function formatProfileEvent(name: string, value: number): string {
     return `${(value / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   }
   return value.toLocaleString();
+}
+
+interface CpuCoresCellProps {
+  /** Effective cores in use during this query — see formatCores() in lib/utils. */
+  cores: number;
+}
+
+/**
+ * Cores cell with a "used / total" + mini bar. Pulls server total once via
+ * useClusterCpuCount (TanStack Query dedupes the subscription so calling this
+ * in a leaf component per row is fine — only one actual fetch fires). When the
+ * total isn't known yet (first paint / a server that hides NumberOfPhysicalCPUCores),
+ * we degrade gracefully to the bare "N×" multiplier so the column never goes blank.
+ *
+ * The bar tints amber at 50% and red at 90% — "this single query alone is
+ * close to saturating the box". Below 50% stays brand-neutral.
+ */
+function CpuCoresCell({ cores }: CpuCoresCellProps) {
+  const { data: totalCores = 0 } = useClusterCpuCount();
+
+  if (!Number.isFinite(cores) || cores <= 0) {
+    return <span className="text-paper-faint">—</span>;
+  }
+  // No server total yet → fall back to the absolute "N×" view.
+  if (totalCores <= 0) {
+    return <span className="text-paper-muted">{formatCores(cores)}</span>;
+  }
+
+  const total = Math.round(totalCores);
+  const display =
+    cores < 1 ? cores.toFixed(2) : cores < 10 ? cores.toFixed(1) : String(Math.round(cores));
+  const ratio = Math.min(1, cores / totalCores);
+  const ratioPct = ratio * 100;
+  const tone =
+    ratioPct >= 90
+      ? "bg-red-500 dark:bg-red-400"
+      : ratioPct >= 50
+        ? "bg-amber-500 dark:bg-amber-400"
+        : "bg-brand";
+  const textTone =
+    ratioPct >= 90 ? "text-red-600 dark:text-red-400" : "text-paper";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="inline-flex items-center justify-end gap-2">
+          <span className={cn("font-mono tabular-nums", textTone)}>
+            {display}
+            <span className="text-paper-faint">/{total}</span>
+          </span>
+          <div className="h-1 w-[28px] overflow-hidden rounded-full bg-ink-200">
+            <div
+              className={cn("h-full", tone)}
+              style={{ width: `${ratioPct}%` }}
+            />
+          </div>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent
+        side="left"
+        sideOffset={6}
+        className="rounded-xs border border-ink-700 bg-ink-200 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-muted shadow-xl ring-1 ring-black/30"
+      >
+        {display}× cores active · {ratioPct.toFixed(0)}% of {total} server cores
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 interface MemoryCellProps {

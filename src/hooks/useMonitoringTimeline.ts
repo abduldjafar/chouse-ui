@@ -238,6 +238,7 @@ export interface QueryPattern {
   max_memory: number;
   total_read_rows: number;
   total_read_bytes: number;
+  avg_cores_used: number;       // ProfileEvents OSCPUVirtualTime / duration, avg per execution
   sample_user: string;
   sample_query_id: string;
 }
@@ -249,7 +250,8 @@ export type QueryPatternSort =
   | "max_duration_ms"
   | "max_memory"
   | "total_read_rows"
-  | "total_read_bytes";
+  | "total_read_bytes"
+  | "avg_cores_used";
 
 /**
  * Aggregate queries by normalized pattern. normalizeQuery() replaces
@@ -288,6 +290,11 @@ export function useQueryPatterns(
           max(memory_usage) AS max_memory,
           sum(read_rows) AS total_read_rows,
           sum(read_bytes) AS total_read_bytes,
+          -- Avg effective CPU cores per execution. ProfileEvents is
+          -- Map(String, UInt64); the access returns 0 for missing keys so old
+          -- CH still aggregates safely. nullIf() drops sub-ms duration rows
+          -- from the average instead of inflating it with divide-by-tiny.
+          avg(ProfileEvents['OSCPUVirtualTimeMicroseconds'] / 1000.0 / nullIf(query_duration_ms, 0)) AS avg_cores_used,
           anyLast(user) AS sample_user,
           anyLast(query_id) AS sample_query_id
         FROM system.query_log
@@ -309,6 +316,7 @@ export function useQueryPatterns(
         max_memory: num(row.max_memory),
         total_read_rows: num(row.total_read_rows),
         total_read_bytes: num(row.total_read_bytes),
+        avg_cores_used: num(row.avg_cores_used),
         sample_user: String(row.sample_user ?? ""),
         sample_query_id: String(row.sample_query_id ?? ""),
       }));
@@ -331,6 +339,7 @@ export interface ByRedashRow {
   max_memory: number;
   total_read_rows: number;
   total_read_bytes: number;
+  avg_cores_used: number;         // avg effective CPU cores per execution
   sample_query_id: string;        // ClickHouse query_id (for drill-down)
 }
 
@@ -343,7 +352,8 @@ export type ByRedashSort =
   | "min_memory"
   | "max_memory"
   | "total_read_rows"
-  | "total_read_bytes";
+  | "total_read_bytes"
+  | "avg_cores_used";
 
 /**
  * Aggregate queries by the Redash query_id embedded in the SQL leading
@@ -391,6 +401,9 @@ export function useQueryByRedashId(
           max(memory_usage) AS max_memory,
           sum(read_rows) AS total_read_rows,
           sum(read_bytes) AS total_read_bytes,
+          -- Avg effective CPU cores per execution of this Redash query — see
+          -- useQueryPatterns for the formula; same nullIf guard here.
+          avg(ProfileEvents['OSCPUVirtualTimeMicroseconds'] / 1000.0 / nullIf(query_duration_ms, 0)) AS avg_cores_used,
           anyLast(query_id) AS sample_query_id
         FROM system.query_log
         WHERE ${timeWindowWhere(hoursBack, customRange)}
@@ -415,6 +428,7 @@ export function useQueryByRedashId(
         max_memory: num(row.max_memory),
         total_read_rows: num(row.total_read_rows),
         total_read_bytes: num(row.total_read_bytes),
+        avg_cores_used: num(row.avg_cores_used),
         sample_query_id: String(row.sample_query_id ?? ""),
       }));
     },
@@ -521,6 +535,7 @@ export interface ByTableRow {
   total_read_bytes: number;
   total_written_rows: number;
   max_memory: number;
+  avg_cores_used: number;       // avg effective CPU cores per query against this table
 }
 
 export type ByTableSort =
@@ -528,7 +543,8 @@ export type ByTableSort =
   | "queries"
   | "total_read_rows"
   | "total_read_bytes"
-  | "max_memory";
+  | "max_memory"
+  | "avg_cores_used";
 
 /**
  * Aggregate queries grouped by the tables they touched. Uses
@@ -571,7 +587,11 @@ export function useQueryByTable(
           sum(read_rows) AS total_read_rows,
           sum(read_bytes) AS total_read_bytes,
           sum(written_rows) AS total_written_rows,
-          max(memory_usage) AS max_memory
+          max(memory_usage) AS max_memory,
+          -- Avg effective CPU cores per query against this table. cpu_us is
+          -- pre-extracted in the inner SELECT so the Map access happens once
+          -- per row instead of once per outer aggregate row.
+          avg(cpu_us / 1000.0 / nullIf(query_duration_ms, 0)) AS avg_cores_used
         FROM (
           SELECT
             arrayFilter(
@@ -587,7 +607,8 @@ export function useQueryByTable(
             read_rows,
             read_bytes,
             written_rows,
-            memory_usage
+            memory_usage,
+            ProfileEvents['OSCPUVirtualTimeMicroseconds'] AS cpu_us
           FROM system.query_log
           WHERE ${timeWindowWhere(hoursBack, customRange)}
             AND type IN ('QueryFinish', 'ExceptionWhileProcessing', 'ExceptionBeforeStart')
@@ -610,9 +631,121 @@ export function useQueryByTable(
         total_read_bytes: num(row.total_read_bytes),
         total_written_rows: num(row.total_written_rows),
         max_memory: num(row.max_memory),
+        avg_cores_used: num(row.avg_cores_used),
       }));
     },
     staleTime: 30_000,
+    ...options,
+  });
+}
+
+/* ============================================================
+   By User — distribution of CPU + memory consumption per user
+   over a longer horizon (day / month / year buckets).
+   ============================================================ */
+
+export type ByUserGranularity = "day" | "month" | "year";
+
+export interface ByUserRow {
+  /** ISO date-ish key: '2026-05-31' for day, '2026-05' for month, '2026' for year. */
+  bucket: string;
+  user: string;
+  queries: number;
+  total_cpu_seconds: number;     // ProfileEvents OSCPUVirtualTime / 1e6
+  total_memory_bytes: number;    // sum(memory_usage) — cumulative work
+  peak_memory_bytes: number;     // max(memory_usage) — biggest single query
+  avg_cores: number;             // avg effective parallelism
+  total_read_bytes: number;
+  total_duration_ms: number;
+}
+
+export type ByUserSort =
+  | "total_cpu_seconds"
+  | "queries"
+  | "total_memory_bytes"
+  | "peak_memory_bytes"
+  | "avg_cores"
+  | "total_read_bytes"
+  | "total_duration_ms";
+
+/**
+ * Aggregate query_log by (time-bucket, user). The bucketing function changes
+ * with `granularity` so day/month/year all hit the same shape on the wire and
+ * the frontend pivot doesn't have to special-case anything.
+ *
+ * `daysBack` is the SCOPE — how far back to look. Picked by the parent based
+ * on granularity (typically 30/90 days for daily, 1 year for monthly,
+ * 5 years for yearly). Hard LIMIT 10_000 keeps the payload bounded on heavy
+ * clusters; the frontend reduces by top-N anyway so we never need every user.
+ *
+ * Filters out the empty-user noise that system queries / async inserts can
+ * leave behind. ProfileEvents['OSCPUVirtualTimeMicroseconds'] is the same
+ * field driving the per-row "Cores" column on the other Logs tabs, so the
+ * numbers are directly comparable.
+ */
+export function useQueryByUser(
+  granularity: ByUserGranularity,
+  daysBack: number,
+  sortBy: ByUserSort = "total_cpu_seconds",
+  limit: number = 10_000,
+  options?: Partial<UseQueryOptions<ByUserRow[], Error>>,
+) {
+  const { activeConnectionId } = useAuthStore();
+
+  return useQuery({
+    queryKey: [
+      "queryByUser",
+      granularity,
+      daysBack,
+      sortBy,
+      limit,
+      activeConnectionId,
+    ] as const,
+    queryFn: async () => {
+      // Bucket builder. formatDateTime preferred over toStartOf* aliasing to
+      // dodge the CH 24.11 alias-shadow trap — the string bucket can be safely
+      // GROUP BY'd without colliding with event_time's DateTime type.
+      const bucketExpr =
+        granularity === "year"
+          ? "formatDateTime(toStartOfYear(event_time), '%Y')"
+          : granularity === "month"
+            ? "formatDateTime(toStartOfMonth(event_time), '%Y-%m')"
+            : "formatDateTime(toStartOfDay(event_time), '%Y-%m-%d')";
+
+      const sql = `
+        SELECT
+          ${bucketExpr} AS bucket,
+          user,
+          count() AS queries,
+          sum(ProfileEvents['OSCPUVirtualTimeMicroseconds']) / 1e6 AS total_cpu_seconds,
+          sum(memory_usage) AS total_memory_bytes,
+          max(memory_usage) AS peak_memory_bytes,
+          avg(ProfileEvents['OSCPUVirtualTimeMicroseconds'] / 1000.0 / nullIf(query_duration_ms, 0)) AS avg_cores,
+          sum(read_bytes) AS total_read_bytes,
+          sum(query_duration_ms) AS total_duration_ms
+        FROM system.query_log
+        WHERE event_time >= now() - INTERVAL ${Math.max(1, Math.floor(daysBack))} DAY
+          AND type IN ('QueryFinish', 'ExceptionWhileProcessing', 'ExceptionBeforeStart')
+          AND user != ''
+        GROUP BY bucket, user
+        ORDER BY bucket DESC, ${sortBy} DESC
+        LIMIT ${limit}
+      `;
+      const result = await queryApi.executeQuery(sql);
+      return (result.data as Array<Record<string, unknown>>).map((row) => ({
+        bucket: String(row.bucket ?? ""),
+        user: String(row.user ?? ""),
+        queries: num(row.queries),
+        total_cpu_seconds: num(row.total_cpu_seconds),
+        total_memory_bytes: num(row.total_memory_bytes),
+        peak_memory_bytes: num(row.peak_memory_bytes),
+        avg_cores: num(row.avg_cores),
+        total_read_bytes: num(row.total_read_bytes),
+        total_duration_ms: num(row.total_duration_ms),
+      }));
+    },
+    // Daily/monthly/yearly buckets are slow-moving — refresh sparingly.
+    staleTime: 5 * 60 * 1000,
     ...options,
   });
 }
@@ -1735,6 +1868,57 @@ export function useClusterMemoryTotal(
   });
 }
 
+/**
+ * Total CPU cores reported by ClickHouse — the denominator for the "cores
+ * used" column on the Logs tables. Same caching / connection-scoped query key
+ * pattern as useClusterMemoryTotal so the value survives connection changes.
+ *
+ * Metric names for CPU count vary across CH versions / builds, so we try a
+ * fallback chain ordered from most specific to most defensive:
+ *   1. NumberOfPhysicalCPUCores async metric (newer CH builds)
+ *   2. NumberOfCPUs async metric (some 22.x/23.x builds expose this instead)
+ *   3. count(CPUFrequencyMHz_%) — every build verified so far publishes
+ *      one CPUFrequencyMHz_N per core (e.g. CPUFrequencyMHz_0..MHz_7 for
+ *      an 8-core box). The count IS the core count, reliably.
+ *   4. count(OSUserTime_%) — alternative per-core metric on some builds
+ *      where CPU is published per-CPU instead of as a single aggregate.
+ *   5. max_threads setting — defaults to physical core count at startup.
+ * Falls through to 0 → UI degrades to the "N×" view honestly.
+ */
+export function useClusterCpuCount(
+  options?: Partial<UseQueryOptions<number, Error>>
+) {
+  const { activeConnectionId } = useAuthStore();
+
+  return useQuery({
+    queryKey: ["clusterCpuCount", activeConnectionId] as const,
+    queryFn: async () => {
+      // The SQL function getSetting('max_threads') resolves the EFFECTIVE
+      // value — when an operator leaves it at 0 ("auto"), CH expands it to
+      // the physical core count at session start, which is exactly what we
+      // want as a denominator. Wrapped in try() so a server that's hardened
+      // against introspection (e.g. CH Cloud restricted readers) still
+      // degrades to 0 → "N×" instead of erroring the whole query.
+      const result = await queryApi.executeQuery(
+        `SELECT coalesce(
+           (SELECT value FROM system.asynchronous_metrics WHERE metric = 'NumberOfPhysicalCPUCores' AND value > 0 LIMIT 1),
+           (SELECT value FROM system.asynchronous_metrics WHERE metric = 'NumberOfCPUs' AND value > 0 LIMIT 1),
+           (SELECT nullIf(toFloat64(count()), 0) FROM system.asynchronous_metrics WHERE metric LIKE 'CPUFrequencyMHz_%'),
+           (SELECT nullIf(toFloat64(count()), 0) FROM system.asynchronous_metrics WHERE metric LIKE 'OSUserTime_%'),
+           (SELECT nullIf(toFloat64(count()), 0) FROM system.asynchronous_metrics WHERE metric LIKE 'OSIdleTime_%'),
+           toFloat64(getSetting('max_threads')),
+           (SELECT toFloat64(toUInt64OrZero(value)) FROM system.settings WHERE name = 'max_threads' AND toUInt64OrZero(value) > 0 LIMIT 1),
+           0
+         ) AS value`
+      );
+      const row = (result.data as Array<{ value: unknown }>)[0];
+      return num(row?.value);
+    },
+    staleTime: 5 * 60 * 1000,
+    ...options,
+  });
+}
+
 export interface PartLogEntry {
   event_time: string;
   event_type: string;
@@ -1802,36 +1986,117 @@ export function usePartLog(
 export interface ServerErrorRow {
   code: number;
   name: string;
-  count: number;            // cumulative since server start (system.errors.value)
+  /** When source='errors' → cumulative since server start (system.errors.value).
+   *  When source='query_log' → hits inside the lookup window (system.query_log).
+   *  Mixed semantic on purpose: the canonical counter for codes CH tracks,
+   *  in-window for ones it doesn't (e.g. NETWORK_ERROR 210 on some CH builds). */
+  count: number;
   last_error_time: string;
   last_error_message: string;
   remote: number;
+  last_user: string;        // most recent user who hit this code (from query_log, in window)
+  affected_users: number;   // distinct users who hit this code (in window)
+  /** Where this row came from. UI tags 'query_log'-only rows with a badge so
+   *  the operator knows the count is a window number, not the lifetime counter. */
+  source: "errors" | "query_log";
 }
 
+/** Lookup window for the user-attribution CTE on useServerErrors. The wider
+ *  the window, the more historical errors get a user attached — at the cost
+ *  of a heavier system.query_log scan. Hard-capped to 1/3/5/7 days both for
+ *  UI simplicity and because beyond a week most operators care about live
+ *  state, not archaeology. */
+export type ServerErrorsLookupDays = 1 | 3 | 5 | 7;
+export const SERVER_ERRORS_LOOKUP_DAYS: ServerErrorsLookupDays[] = [1, 3, 5, 7];
+
 /**
- * Cumulative error counters from system.errors. This is the canonical "what
- * is this server erroring on" table — every error code with its hit count,
- * last occurrence, and last message. Always present.
+ * Cumulative error counters from system.errors, enriched with WHO hit each
+ * code by joining against system.query_log on exception_code. system.errors
+ * itself has no user column (it's server-wide), so the user attribution lives
+ * in query_log.exception_code which CH writes for every QueryFinish /
+ * Exception* row.
+ *
+ * The CTE is bounded to `lookupDays` days. Wider window = more codes get a
+ * user attached (errors that haven't fired recently still resolve), but the
+ * scan is heavier on busy clusters. Codes that didn't fire inside the window
+ * get last_user = '' and the UI renders "—".
  */
 export function useServerErrors(
+  lookupDays: ServerErrorsLookupDays = 1,
   options?: Partial<UseQueryOptions<ServerErrorRow[], Error>>
 ) {
   const { activeConnectionId } = useAuthStore();
+  // Validate against the whitelist so a stray value (URL tampering) can't
+  // become a runaway scan window.
+  const windowDays = SERVER_ERRORS_LOOKUP_DAYS.includes(lookupDays) ? lookupDays : 1;
   return useQuery({
-    queryKey: ["serverErrors", activeConnectionId] as const,
+    queryKey: ["serverErrors", activeConnectionId, windowDays] as const,
     queryFn: async () => {
       // _str suffix on the DateTime alias — CH 24.11 NO_COMMON_TYPE trap.
+      // Two-source merge: system.errors is canonical for codes CH tracks
+      // (incremented on every throw, value is cumulative since restart). But
+      // some codes — notably NETWORK_ERROR 210 "Broken pipe while writing to
+      // socket" — happen AFTER the query succeeded, during response write to
+      // a disconnected client, and CH doesn't increment system.errors for
+      // those. They DO land in system.query_log as ExceptionWhileProcessing
+      // though, so we UNION the in-window query_log rollup for any code that
+      // isn't already in system.errors. UI tags those rows with a "in Nd"
+      // badge so the count's semantic shift is visible.
       const sql = `
+        WITH qlog_per_code AS (
+          SELECT
+            exception_code AS code,
+            count() AS hits_window,
+            -- Extract the canonical name from the exception text's leading
+            -- "CODE: …" prefix when present (CH's exception messages start
+            -- with the macro name). Strips leading 'DB::Exception:' too.
+            argMax(
+              extract(
+                replaceRegexpOne(exception, '^DB::Exception:\\\\s*', ''),
+                '^([A-Z_][A-Z0-9_]+)'
+              ),
+              event_time
+            ) AS qlog_name,
+            max(event_time) AS qlog_last_time,
+            substring(argMax(exception, event_time), 1, 600) AS qlog_last_message,
+            argMax(user, event_time) AS last_user,
+            uniqExact(user) AS affected_users
+          FROM system.query_log
+          WHERE event_time >= now() - INTERVAL ${windowDays} DAY
+            AND exception_code != 0
+            AND user != ''
+          GROUP BY exception_code
+        )
         SELECT
-          code,
-          name,
-          value AS count,
-          formatDateTime(last_error_time, '%Y-%m-%d %H:%i:%S') AS last_error_time_str,
-          substring(last_error_message, 1, 600) AS last_error_message,
-          remote
-        FROM system.errors
-        WHERE value > 0
-        ORDER BY value DESC
+          e.code AS code,
+          e.name AS name,
+          e.value AS count,
+          formatDateTime(e.last_error_time, '%Y-%m-%d %H:%i:%S') AS last_error_time_str,
+          substring(e.last_error_message, 1, 600) AS last_error_message,
+          e.remote AS remote,
+          coalesce(q.last_user, '') AS last_user,
+          coalesce(q.affected_users, 0) AS affected_users,
+          'errors' AS source
+        FROM system.errors e
+        LEFT JOIN qlog_per_code q ON q.code = e.code
+        WHERE e.value > 0
+
+        UNION ALL
+
+        SELECT
+          q.code AS code,
+          coalesce(nullIf(q.qlog_name, ''), concat('CODE_', toString(q.code))) AS name,
+          q.hits_window AS count,
+          formatDateTime(q.qlog_last_time, '%Y-%m-%d %H:%i:%S') AS last_error_time_str,
+          q.qlog_last_message AS last_error_message,
+          0 AS remote,
+          q.last_user AS last_user,
+          q.affected_users AS affected_users,
+          'query_log' AS source
+        FROM qlog_per_code q
+        WHERE q.code NOT IN (SELECT code FROM system.errors WHERE value > 0)
+
+        ORDER BY count DESC
         LIMIT 300
       `;
       const result = await queryApi.executeQuery(sql);
@@ -1842,6 +2107,9 @@ export function useServerErrors(
         last_error_time: String(row.last_error_time_str ?? ""),
         last_error_message: String(row.last_error_message ?? ""),
         remote: num(row.remote),
+        last_user: String(row.last_user ?? ""),
+        affected_users: num(row.affected_users),
+        source: (row.source === "query_log" ? "query_log" : "errors") as "errors" | "query_log",
       }));
     },
     staleTime: 15_000,

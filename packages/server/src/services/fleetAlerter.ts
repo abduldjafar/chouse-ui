@@ -57,7 +57,9 @@ interface EmailConfig {
   to: string;
   from: string;
 }
-interface AlertConfig {
+// Exported so sibling services (scheduledReporter) can reuse the channel
+// configs without re-parsing alert-config.json.
+export interface AlertConfig {
   rules: AlertRules;
   slack?: SlackConfig;
   googleChat?: GoogleChatConfig;
@@ -66,6 +68,10 @@ interface AlertConfig {
   aiRcaOnBreach: boolean;
   /** AI config id for the auto-RCA scan (undefined = use the default model). */
   aiRcaModelId?: string;
+}
+
+export function loadAlertConfig(): AlertConfig | null {
+  return loadConfig();
 }
 
 interface SnapshotInput {
@@ -100,6 +106,61 @@ const armed = new Map<string, boolean>();
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Diagnose WHY loadConfig would return null — so the test endpoints can show
+ * an error message that points the operator at the exact knob to flip,
+ * instead of a vague "no channel set up". Returns { ok: true } when delivery
+ * would actually work right now.
+ */
+export function diagnoseAlertConfig(): { ok: true } | { ok: false; reason: string } {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+  } catch {
+    return {
+      ok: false,
+      reason:
+        "No delivery channel has been saved yet — fill in a Slack / Google Chat webhook or the SMTP fields above, flip the channel switch on, and click Save.",
+    };
+  }
+  if (!parsed || parsed.enabled === false) {
+    return {
+      ok: false,
+      reason:
+        "Delivery is master-switched OFF. Flip the top 'Delivery enabled' toggle on and Save before testing.",
+    };
+  }
+  // Map raw channels → (has URL/creds, switch state) so we can be specific.
+  const slackHas = Boolean((parsed.slack as { webhookUrl?: unknown } | undefined)?.webhookUrl);
+  const slackOn = (parsed.slack as { enabled?: unknown } | undefined)?.enabled !== false;
+  const gchatHas = Boolean((parsed.googleChat as { webhookUrl?: unknown } | undefined)?.webhookUrl);
+  const gchatOn = (parsed.googleChat as { enabled?: unknown } | undefined)?.enabled !== false;
+  const emailRaw = parsed.email as { user?: unknown; password?: unknown; to?: unknown; enabled?: unknown } | undefined;
+  const emailHas = Boolean(emailRaw?.user && emailRaw?.password && emailRaw?.to);
+  const emailOn = emailRaw?.enabled !== false;
+
+  const anyHas = slackHas || gchatHas || emailHas;
+  const anyOn = (slackHas && slackOn) || (gchatHas && gchatOn) || (emailHas && emailOn);
+  if (!anyHas) {
+    return {
+      ok: false,
+      reason:
+        "No channel has its webhook / SMTP fields filled in yet — paste a Slack or Google Chat webhook URL, or fill in the email fields above, then Save.",
+    };
+  }
+  if (!anyOn) {
+    const off: string[] = [];
+    if (slackHas && !slackOn) off.push("Slack");
+    if (gchatHas && !gchatOn) off.push("Google Chat");
+    if (emailHas && !emailOn) off.push("email");
+    return {
+      ok: false,
+      reason: `Your ${off.join(" / ")} channel${off.length > 1 ? "s are" : " is"} configured but switched OFF — flip the toggle next to ${off.length > 1 ? "any of them" : off[0]} on and Save, then test again.`,
+    };
+  }
+  return { ok: true };
 }
 
 function loadConfig(): AlertConfig | null {
@@ -636,7 +697,10 @@ async function runAutoRca(config: AlertConfig, triggers: string[]): Promise<void
 export async function sendTestAlert(): Promise<{ slack: boolean; googleChat: boolean; email: boolean }> {
   const config = loadConfig();
   if (!config) {
-    throw new Error(`No alert config at ${CONFIG_PATH} (missing, invalid, disabled, or no channel set)`);
+    // Diagnose the *specific* knob that's off so the operator doesn't have to
+    // guess which of the three real causes is in play.
+    const d = diagnoseAlertConfig();
+    throw new Error(d.ok ? "Couldn't load alert config." : d.reason);
   }
   await deliver(
     {
@@ -721,6 +785,20 @@ export async function processTick(
       lastAutoRcaAt = Date.now();
       const triggers = fires.map((b) => `${b.node} — ${b.metric}: ${b.summary}`);
       void runAutoRca(config, triggers);
+    }
+
+    // Scheduled health report — fires on a clock (every 15m/1h/etc),
+    // independent of breach state. The reporter handles its own due-check +
+    // bookkeeping; this just hands it the connection list piggybacking on the
+    // poll tick we already have to avoid a separate timer.
+    try {
+      const { processScheduledReportTick } = await import("./scheduledReporter");
+      void processScheduledReportTick(config, connections);
+    } catch (err) {
+      logger.warn(
+        { module: "FleetAlerter", err: err instanceof Error ? err.message : String(err) },
+        "scheduled report tick skipped",
+      );
     }
   } catch (err) {
     logger.error({ module: "FleetAlerter", err: err instanceof Error ? err.message : String(err) }, "processTick failed");
