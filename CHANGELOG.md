@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- SSO login via configurable OIDC and OAuth2 providers (`auth.sso.*` config): authorization code + PKCE flow, JIT user provisioning with default role, auto-link by verified email, optional IdP claim→role mapping (never demotes super_admin), and SSO-enforced sign-in for linked non-admin accounts.
 
 ## [v2.18.0] - 2026-06-11
 
@@ -24,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unified query optimizer window** — the "Optimize with Chouse AI" action in Query Logs now opens the *same* dialog as the SQL editor's Optimize button (`OptimizeQueryDialog`) instead of a separate one. The dialog renders a union of analysis sections: the diff + explanation + tips for editor queries, and the richer root-cause / per-table / before→after EXPLAIN estimate for log queries (the analysis card was extracted into a shared `OptimizationAnalysis` component reused by the Fleet Doctor report). The model picker is unified to `/ai/models`.
 - **"Tables" stat relabeled to "Tables & Views"** — the Home and Metrics cluster cards count `system.tables`, which already includes views; the label now reflects that. No data/query change.
 - **Unified AI backend behind a single capability engine** — every AI feature (SQL editor optimize/debug/check, Query Logs optimize, Errors/Parts/Schema diagnose, fleet doctor scan, chat) is now described by a declarative capability in a single registry (`packages/server/src/services/ai/capabilities`) and executed by one shared engine that owns model resolution, the tool-loop agent, structured-output extraction, step collection, and error handling. This removes ~8 hand-rolled copies of the same agent loop and the duplicated JSON-extraction logic. The seven query-scoped structured capabilities are reached through a single endpoint, `POST /ai/invoke` (`{ capability, input, modelId }`); the model picker is unified to `GET /ai/models` and capability availability to `GET /ai/capabilities`. Streaming chat (`/ai-chat/stream`) and the fleet doctor scan (`/fleet/doctor/scan`) keep their dedicated routes (different auth surfaces) but now run through the same engine. The old per-feature `/query/optimize`, `/query/debug`, `/query/check-optimization`, `/query/optimize-log`, `/query/diagnose-*`, and `/query/optimize-models` routes and the `aiOptimizer`/`chouseDoctor`/`aiChat` services were removed. No user-visible behavior change; the frontend AI API functions keep the same signatures.
+
+## [v2.17.4] - 2026-06-08
 
 ### Fixed
 
