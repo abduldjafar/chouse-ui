@@ -112,7 +112,7 @@ EXPOSE 5521
 USER ch-user
 
 # Health check - verify both API and static serving work
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:5521/api/health || exit 1
 
 # Start the server
