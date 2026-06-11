@@ -37,12 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **AI Diagnose / Optimize dialogs — no cancel mechanism** — closing any AI analysis dialog (via Escape, backdrop click, or ✕) now aborts the in-flight HTTP request via `AbortController`, stopping the analysis immediately rather than letting it run in the background.
 - **Workspace Explain tab — Analysis sub-tab removed** — the Analysis sub-tab and all associated dead code (`QueryAnalysisView`, `analyzeQuery` API function, server-side `/query/analyze` route, complexity/recommendation types) have been permanently deleted.
 
-## [v2.17.4] - 2026-06-08
-
-### Fixed
-
-- **Fleet, Home, and Metrics page schema counts are now consistent** — all three now use the same canonical logic: `(SELECT count() FROM system.databases)` for databases (catches empty databases), `countIf`/`count()` against `system.tables` for tables and views (including system databases), and `sum(total_rows)`/`sum(total_bytes)` from `system.tables` for row and byte totals. Previously each page used a different query with different inclusion rules (some excluded system databases, some used `system.parts WHERE active`), causing mismatched numbers across the UI.
-
 ## [v2.17.3] - 2026-06-08
 
 ### Changed
