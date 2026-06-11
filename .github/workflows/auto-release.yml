@@ -125,6 +125,7 @@ jobs:
     needs: assemble
     if: needs.assemble.outputs.has_code_changes == 'true'
     runs-on: ubuntu-latest
+    environment: docker-publish
     permissions:
       contents: read
       packages: write
