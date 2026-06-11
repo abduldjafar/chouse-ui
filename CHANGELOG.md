@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v2.19.0] - 2026-06-11
+
+### Added
+- **SSO login with OIDC and OAuth2** — authorization code + PKCE flow, JIT user provisioning with configurable default role, auto-link by verified email, optional IdP claim→role mapping (never demotes super_admin), SSO-enforced sign-in for linked non-admin accounts
+
+### Removed
+- **"Latest release" section from docs site** — the v2.16.0 What's New strip has been removed from the portfolio page
+
 ## [v2.18.0] - 2026-06-11
 
 ### Added
