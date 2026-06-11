@@ -32,6 +32,7 @@
     "jose": "^5.9.6",
     "node-sql-parser": "^5.3.13",
     "nodemailer": "^8.0.7",
+    "openid-client": "^6",
     "pino": "^10.3.1",
     "postgres": "^3.4.5",
     "sql-formatter": "^15.7.1",

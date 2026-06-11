@@ -39,6 +39,11 @@ if (JWT_SECRET.length === 0) {
   throw new Error('JWT_SECRET is required but not set');
 }
 
+/** The validated HS256 signing key, shared with the SSO state cookie. */
+export function getJwtSecretKey(): Uint8Array {
+  return JWT_SECRET;
+}
+
 const JWT_ISSUER = process.env.JWT_ISSUER || 'chouseui';
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'chouseui-client';
 

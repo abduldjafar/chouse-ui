@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 import { PrivateRoute } from "@/components/common/privateRoute";
 import Admin from "@/pages/Admin";
 import Login from "@/pages/Login";
+import SsoCallback from "@/pages/SsoCallback";
 import ExplorerPage from "@/pages/Explorer";
 import ExplainPopout from "@/pages/ExplainPopout";
 import { AdminRoute } from "@/features/admin/routes/adminRoute";
@@ -140,6 +141,7 @@ export default function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
+            <Route path="/auth/sso/callback" element={<SsoCallback />} />
             <Route path="/explain-popout" element={<ExplainPopout />} />
 
             {/* Authenticated Application Routes */}

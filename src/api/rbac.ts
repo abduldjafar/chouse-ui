@@ -1643,3 +1643,68 @@ export async function checkRbacHealth(): Promise<{
   const data = await response.json();
   return data.data;
 }
+
+// ============================================
+// SSO API
+// ============================================
+
+export interface SsoProviderInfo {
+  id: string;
+  displayName: string;
+}
+
+export interface SsoCallbackResponse extends RbacLoginResponse {
+  redirect: string;
+}
+
+export const ssoApi = {
+  /** Public list of configured SSO providers (empty when SSO is disabled). */
+  async getProviders(): Promise<SsoProviderInfo[]> {
+    const response = await fetch('/api/rbac/auth/sso/providers', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new ApiError(
+        data.error?.message || 'Failed to load SSO providers',
+        response.status,
+        data.error?.code
+      );
+    }
+    return data.data.providers;
+  },
+
+  /** URL that begins the SSO flow for a provider (server 302s to the IdP). */
+  startUrl(providerId: string, redirect: string): string {
+    return `/api/rbac/auth/sso/${encodeURIComponent(providerId)}/start?redirect=${encodeURIComponent(redirect)}`;
+  },
+
+  /**
+   * Complete the flow: forward the RAW query string the IdP appended to the
+   * callback redirect (code, state, iss, ...) so the server can rebuild the
+   * authorization response verbatim — openid-client validates parameters
+   * like iss, which would fail if we forwarded only code+state.
+   * The server identifies the provider from its signed state cookie,
+   * so no provider id is needed here.
+   */
+  async completeCallback(params: string): Promise<SsoCallbackResponse> {
+    const response = await fetch('/api/rbac/auth/sso/callback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ params }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new ApiError(
+        data.error?.message || 'SSO sign-in failed',
+        response.status,
+        data.error?.code
+      );
+    }
+    setRbacTokens(data.data.tokens);
+    return data.data;
+  },
+};

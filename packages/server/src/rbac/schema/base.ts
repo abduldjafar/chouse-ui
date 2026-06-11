@@ -313,6 +313,8 @@ export const AUDIT_ACTIONS = {
   LOGOUT: 'auth.logout',
   LOGIN_FAILED: 'auth.login_failed',
   PASSWORD_CHANGE: 'auth.password_change',
+  SSO_LOGIN: 'auth.sso_login',
+  SSO_LOGIN_FAILED: 'auth.sso_login_failed',
 
   // User Management
   USER_CREATE: 'user.create',

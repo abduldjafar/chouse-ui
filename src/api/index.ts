@@ -71,6 +71,7 @@ export {
   rbacConnectionsApi,
   rbacUserPreferencesApi,
   checkRbacHealth,
+  ssoApi,
 } from './rbac';
 export type {
   RbacUser,
@@ -81,6 +82,8 @@ export type {
   UserFavorite,
   UserRecentItem,
   UserPreferences,
+  SsoProviderInfo,
+  SsoCallbackResponse,
   CreateUserInput as RbacCreateUserInput,
   UpdateUserInput as RbacUpdateUserInput,
   CreateRoleInput as RbacCreateRoleInput,

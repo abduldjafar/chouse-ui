@@ -1,0 +1,63 @@
+# Local-build variant of docker-compose.yml — builds the image from this
+# working tree (e.g. the SSO branch) instead of pulling ghcr.io.
+#
+#   docker compose -f docker-compose.local.yml up --build -d
+#   open http://localhost:5521   (admin@localhost / admin123!)
+#
+# To try SSO: uncomment the AUTH_SSO_* block below and fill in a provider.
+# NOTE: the IdP issuer must be reachable over HTTPS — openid-client v6
+# rejects http:// issuers, so a plain-HTTP local Keycloak will fail
+# discovery. Use a real/staging IdP, or put a dev IdP behind a TLS proxy.
+# Register this redirect URI at the IdP:  http://localhost:5521/auth/sso/callback
+
+name: chouse-ui-local
+
+services:
+  chouse-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: local-sso
+    container_name: chouse-ui-local
+    ports:
+      - "5521:5521"
+    environment:
+      # All configuration (RBAC, fleet poller, SSO providers) lives in
+      # .config.yaml (gitignored), loaded via the hierarchical YAML loader.
+      CHOUSE_CONFIG_PATH: /app/config.yaml
+      # JWT_SECRET must be a real env var: the server captures it at module
+      # scope BEFORE the YAML loader runs (Bun evaluation-order quirk).
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me-min-32-characters-long}
+    volumes:
+      - chouse-ui-local-data:/app/data
+      - ./.config.yaml:/app/config.yaml:ro
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse-local
+    ports:
+      # Host 8124 to avoid colliding with an already-running ClickHouse on 8123;
+      # chouse-ui reaches this node internally at http://clickhouse:8123.
+      - "8124:8123"
+    environment:
+      CLICKHOUSE_USER: admin
+      CLICKHOUSE_PASSWORD: password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # Named volume (not ./data bind mount) so it can't collide with a host
+  # ./data dir from the ghcr compose file.
+  chouse-ui-local-data:

@@ -16,11 +16,13 @@ import userPreferencesRoutes from './userPreferences';
 import aiProvidersRoutes from './aiProviders';
 import aiModelsRoutes from './aiModels';
 import aiConfigsRoutes from './aiConfigs';
+import ssoRoutes from '../sso/routes';
 
 const rbacRoutes = new Hono();
 
 // Mount routes
 rbacRoutes.route('/auth', authRoutes);
+rbacRoutes.route('/auth/sso', ssoRoutes);
 rbacRoutes.route('/users', userRoutes);
 rbacRoutes.route('/roles', roleRoutes);
 rbacRoutes.route('/audit', auditRoutes);
