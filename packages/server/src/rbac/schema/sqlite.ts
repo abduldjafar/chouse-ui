@@ -159,6 +159,40 @@ export const userIdentities = sqliteTable('rbac_user_identities', {
 }));
 
 // ============================================
+// SSO Settings (singleton) + Providers
+// ============================================
+
+export const ssoSettings = sqliteTable('rbac_sso_settings', {
+  id: text('id').primaryKey(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  baseUrl: text('base_url'),
+  defaultRole: text('default_role').notNull().default('viewer'),
+  autoLinkByEmail: integer('auto_link_by_email', { mode: 'boolean' }).notNull().default(true),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedBy: text('updated_by'),
+});
+
+export const ssoProviders = sqliteTable('rbac_sso_providers', {
+  id: text('id').primaryKey(),
+  type: text('type').notNull(),
+  displayName: text('display_name').notNull(),
+  issuer: text('issuer'),
+  authorizationEndpoint: text('authorization_endpoint'),
+  tokenEndpoint: text('token_endpoint'),
+  userinfoEndpoint: text('userinfo_endpoint'),
+  clientId: text('client_id').notNull(),
+  clientSecretEncrypted: text('client_secret_encrypted').notNull(),
+  scopes: text('scopes').notNull(),
+  claimMapping: text('claim_mapping'),
+  roleMappingClaim: text('role_mapping_claim'),
+  roleMapping: text('role_mapping'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+  createdBy: text('created_by'),
+});
+
+// ============================================
 // Audit Logs Table
 // ============================================
 
@@ -539,3 +573,7 @@ export type AiConfig = typeof aiConfigs.$inferSelect;
 export type NewAiConfig = typeof aiConfigs.$inferInsert;
 export type UserIdentity = typeof userIdentities.$inferSelect;
 export type NewUserIdentity = typeof userIdentities.$inferInsert;
+export type SsoSettings = typeof ssoSettings.$inferSelect;
+export type NewSsoSettings = typeof ssoSettings.$inferInsert;
+export type SsoProvider = typeof ssoProviders.$inferSelect;
+export type NewSsoProvider = typeof ssoProviders.$inferInsert;

@@ -100,6 +100,15 @@ const VERSION_CHECKS: Record<string, () => Promise<void>> = {
     // Per-user connection access is gone; access is derived from role policies.
     expect(await h.tableExists("rbac_user_connections")).toBe(false);
   },
+  "1.29.0": async () => {
+    expect(await h.tableExists("rbac_sso_settings")).toBe(true);
+    expect(await h.tableExists("rbac_sso_providers")).toBe(true);
+    expect(await h.permissionExists("sso:view")).toBe(true);
+    expect(await h.permissionExists("sso:manage")).toBe(true);
+    expect(await h.roleHasPermission("super_admin", "sso:view")).toBe(true);
+    expect(await h.roleHasPermission("super_admin", "sso:manage")).toBe(true);
+    expect(await h.roleHasPermission("admin", "sso:view")).toBe(true);
+  },
 };
 
 // ---------------------------------------------------------------------------
