@@ -787,11 +787,11 @@ export async function getConnectionUsers(connectionId: string): Promise<Array<{
       .where(inArray(schema.users.id as any, Array.from(directAccessUserIds)))
     : [];
 
-  // Get roles that grant access to this connection via a data access policy
-  // scoped to it (policy -> connection link, then role -> policy link).
-  const policyLinks = await db.select({ policyId: schema.dataAccessPolicyConnections.policyId })
-    .from(schema.dataAccessPolicyConnections)
-    .where(eq(schema.dataAccessPolicyConnections.connectionId, connectionId));
+  // Get roles that grant access to this connection via a data access policy with
+  // a rule scoped to it (policy rule -> connection, then role -> policy link).
+  const policyLinks = await db.select({ policyId: schema.dataAccessPolicyRules.policyId })
+    .from(schema.dataAccessPolicyRules)
+    .where(eq(schema.dataAccessPolicyRules.connectionId, connectionId));
 
   const scopedPolicyIds = Array.from(new Set(policyLinks.map((l: { policyId: string }) => l.policyId)));
 
@@ -927,12 +927,16 @@ export async function getUserConnections(userId: string): Promise<ConnectionResp
     const policyIds = Array.from(new Set(policyLinks.map((l: { policyId: string }) => l.policyId)));
 
     if (policyIds.length > 0) {
-      const connLinks = await db.select({ connectionId: schema.dataAccessPolicyConnections.connectionId })
-        .from(schema.dataAccessPolicyConnections)
+      // A policy rule scoped to a specific connection grants that connection.
+      // Global rules (connectionId = null) do not grant any specific connection.
+      const connLinks = await db.select({ connectionId: schema.dataAccessPolicyRules.connectionId })
+        .from(schema.dataAccessPolicyRules)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .where(inArray(schema.dataAccessPolicyConnections.policyId as any, policyIds));
-      viaPolicyCount = connLinks.length;
-      connLinks.forEach((r: { connectionId: string }) => connectionIdSet.add(r.connectionId));
+        .where(inArray(schema.dataAccessPolicyRules.policyId as any, policyIds));
+      connLinks.forEach((r: { connectionId: string | null }) => {
+        if (r.connectionId) connectionIdSet.add(r.connectionId);
+      });
+      viaPolicyCount = connectionIdSet.size;
     }
   }
 

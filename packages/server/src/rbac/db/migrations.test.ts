@@ -82,8 +82,10 @@ const VERSION_CHECKS: Record<string, () => Promise<void>> = {
   "1.26.0": async () => {
     expect(await h.tableExists("rbac_data_access_policies")).toBe(true);
     expect(await h.tableExists("rbac_data_access_policy_rules")).toBe(true);
-    expect(await h.tableExists("rbac_data_access_policy_connections")).toBe(true);
     expect(await h.tableExists("rbac_role_data_access_policies")).toBe(true);
+    // Per-rule connection scope (no separate policy<->connection table).
+    expect(await h.columnExists("rbac_data_access_policy_rules", "connection_id")).toBe(true);
+    expect(await h.tableExists("rbac_data_access_policy_connections")).toBe(false);
     expect(await h.permissionExists("data_access:view")).toBe(true);
     expect(await h.roleHasPermission("super_admin", "data_access:view")).toBe(true);
     expect(await h.roleHasPermission("admin", "data_access:assign")).toBe(true);

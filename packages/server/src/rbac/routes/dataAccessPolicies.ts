@@ -32,6 +32,8 @@ const policyRoutes = new Hono();
 // ============================================
 
 const ruleSchema = z.object({
+  // null = applies to all connections
+  connectionId: z.string().uuid().nullable().optional(),
   databasePattern: z.string().min(1).max(255).default('*'),
   tablePattern: z.string().min(1).max(255).default('*'),
   isAllowed: z.boolean().default(true),
@@ -42,19 +44,12 @@ const ruleSchema = z.object({
 const createPolicySchema = z.object({
   name: z.string().min(2).max(255),
   description: z.string().max(500).nullable().optional(),
-  allConnections: z.boolean().default(false),
-  connectionIds: z.array(z.string().uuid()).default([]),
   rules: z.array(ruleSchema).min(1, 'A policy must have at least one rule'),
-}).refine(
-  (data) => data.allConnections || data.connectionIds.length > 0,
-  { message: 'Select at least one connection or enable allConnections' }
-);
+});
 
 const updatePolicySchema = z.object({
   name: z.string().min(2).max(255).optional(),
   description: z.string().max(500).nullable().optional(),
-  allConnections: z.boolean().optional(),
-  connectionIds: z.array(z.string().uuid()).optional(),
   rules: z.array(ruleSchema).min(1, 'A policy must have at least one rule').optional(),
 });
 

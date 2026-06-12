@@ -2721,7 +2721,6 @@ export const MIGRATIONS: Migration[] = [
           id TEXT PRIMARY KEY NOT NULL,
           name TEXT NOT NULL UNIQUE,
           description TEXT,
-          all_connections INTEGER NOT NULL DEFAULT 0,
           is_system INTEGER NOT NULL DEFAULT 0,
           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
           updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -2730,6 +2729,7 @@ export const MIGRATIONS: Migration[] = [
         (db as SqliteDb).run(sql`CREATE TABLE IF NOT EXISTS rbac_data_access_policy_rules (
           id TEXT PRIMARY KEY NOT NULL,
           policy_id TEXT NOT NULL REFERENCES rbac_data_access_policies(id) ON DELETE CASCADE,
+          connection_id TEXT REFERENCES rbac_clickhouse_connections(id) ON DELETE CASCADE,
           database_pattern TEXT NOT NULL DEFAULT '*',
           table_pattern TEXT NOT NULL DEFAULT '*',
           is_allowed INTEGER NOT NULL DEFAULT 1,
@@ -2738,12 +2738,6 @@ export const MIGRATIONS: Migration[] = [
           created_at INTEGER NOT NULL DEFAULT (unixepoch()),
           updated_at INTEGER NOT NULL DEFAULT (unixepoch())
         )`);
-        (db as SqliteDb).run(sql`CREATE TABLE IF NOT EXISTS rbac_data_access_policy_connections (
-          id TEXT PRIMARY KEY NOT NULL,
-          policy_id TEXT NOT NULL REFERENCES rbac_data_access_policies(id) ON DELETE CASCADE,
-          connection_id TEXT NOT NULL REFERENCES rbac_clickhouse_connections(id) ON DELETE CASCADE,
-          created_at INTEGER NOT NULL DEFAULT (unixepoch())
-        )`);
         (db as SqliteDb).run(sql`CREATE TABLE IF NOT EXISTS rbac_role_data_access_policies (
           id TEXT PRIMARY KEY NOT NULL,
           role_id TEXT NOT NULL REFERENCES rbac_roles(id) ON DELETE CASCADE,
@@ -2751,14 +2745,13 @@ export const MIGRATIONS: Migration[] = [
           created_at INTEGER NOT NULL DEFAULT (unixepoch())
         )`);
         (db as SqliteDb).run(sql`CREATE INDEX IF NOT EXISTS data_access_policy_rules_policy_idx ON rbac_data_access_policy_rules(policy_id)`);
-        (db as SqliteDb).run(sql`CREATE UNIQUE INDEX IF NOT EXISTS data_access_policy_conn_idx ON rbac_data_access_policy_connections(policy_id, connection_id)`);
+        (db as SqliteDb).run(sql`CREATE INDEX IF NOT EXISTS data_access_policy_rules_conn_idx ON rbac_data_access_policy_rules(connection_id)`);
         (db as SqliteDb).run(sql`CREATE UNIQUE INDEX IF NOT EXISTS role_data_access_role_policy_idx ON rbac_role_data_access_policies(role_id, policy_id)`);
       } else {
         await (db as PostgresDb).execute(sql`CREATE TABLE IF NOT EXISTS rbac_data_access_policies (
           id TEXT PRIMARY KEY NOT NULL,
           name VARCHAR(255) NOT NULL UNIQUE,
           description TEXT,
-          all_connections BOOLEAN NOT NULL DEFAULT false,
           is_system BOOLEAN NOT NULL DEFAULT false,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -2767,6 +2760,7 @@ export const MIGRATIONS: Migration[] = [
         await (db as PostgresDb).execute(sql`CREATE TABLE IF NOT EXISTS rbac_data_access_policy_rules (
           id TEXT PRIMARY KEY NOT NULL,
           policy_id TEXT NOT NULL REFERENCES rbac_data_access_policies(id) ON DELETE CASCADE,
+          connection_id TEXT REFERENCES rbac_clickhouse_connections(id) ON DELETE CASCADE,
           database_pattern VARCHAR(255) NOT NULL DEFAULT '*',
           table_pattern VARCHAR(255) NOT NULL DEFAULT '*',
           is_allowed BOOLEAN NOT NULL DEFAULT true,
@@ -2775,12 +2769,6 @@ export const MIGRATIONS: Migration[] = [
           created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
         )`);
-        await (db as PostgresDb).execute(sql`CREATE TABLE IF NOT EXISTS rbac_data_access_policy_connections (
-          id TEXT PRIMARY KEY NOT NULL,
-          policy_id TEXT NOT NULL REFERENCES rbac_data_access_policies(id) ON DELETE CASCADE,
-          connection_id TEXT NOT NULL REFERENCES rbac_clickhouse_connections(id) ON DELETE CASCADE,
-          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        )`);
         await (db as PostgresDb).execute(sql`CREATE TABLE IF NOT EXISTS rbac_role_data_access_policies (
           id TEXT PRIMARY KEY NOT NULL,
           role_id TEXT NOT NULL REFERENCES rbac_roles(id) ON DELETE CASCADE,
@@ -2788,7 +2776,7 @@ export const MIGRATIONS: Migration[] = [
           created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
         )`);
         await (db as PostgresDb).execute(sql`CREATE INDEX IF NOT EXISTS data_access_policy_rules_policy_idx ON rbac_data_access_policy_rules(policy_id)`);
-        await (db as PostgresDb).execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS data_access_policy_conn_idx ON rbac_data_access_policy_connections(policy_id, connection_id)`);
+        await (db as PostgresDb).execute(sql`CREATE INDEX IF NOT EXISTS data_access_policy_rules_conn_idx ON rbac_data_access_policy_rules(connection_id)`);
         await (db as PostgresDb).execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS role_data_access_role_policy_idx ON rbac_role_data_access_policies(role_id, policy_id)`);
       }
 
@@ -2861,32 +2849,20 @@ export const MIGRATIONS: Migration[] = [
       }
 
       // Create one policy from a set of legacy rules; returns the new policy id.
+      // Each legacy rule's connection_id maps directly onto the new per-rule
+      // connection scope (null = all connections).
       const createPolicyFromRules = async (
         name: string,
         rules: Array<Record<string, unknown>>,
         isSystem: boolean
       ): Promise<string> => {
-        const connIds = new Set<string>();
-        let hasNullConn = false;
-        for (const r of rules) {
-          if (r.connection_id) connIds.add(String(r.connection_id));
-          else hasNullConn = true;
-        }
-        // A null connection meant "all connections" in the legacy model.
-        const allConnections = hasNullConn || connIds.size === 0;
-
         const policyId = randomUUID();
-        await run(sql`INSERT INTO rbac_data_access_policies (id, name, description, all_connections, is_system, created_at, updated_at, created_by)
-          VALUES (${policyId}, ${name}, ${'Migrated from legacy data access rules'}, ${b(allConnections)}, ${b(isSystem)}, ${now()}, ${now()}, NULL)`);
+        await run(sql`INSERT INTO rbac_data_access_policies (id, name, description, is_system, created_at, updated_at, created_by)
+          VALUES (${policyId}, ${name}, ${'Migrated from legacy data access rules'}, ${b(isSystem)}, ${now()}, ${now()}, NULL)`);
 
         for (const r of rules) {
-          await run(sql`INSERT INTO rbac_data_access_policy_rules (id, policy_id, database_pattern, table_pattern, is_allowed, priority, description, created_at, updated_at)
-            VALUES (${randomUUID()}, ${policyId}, ${String(r.database_pattern ?? '*')}, ${String(r.table_pattern ?? '*')}, ${b(Boolean(r.is_allowed))}, ${Number(r.priority ?? 0)}, ${r.description != null ? String(r.description) : null}, ${now()}, ${now()})`);
-        }
-        if (!allConnections) {
-          for (const cid of connIds) {
-            await run(sql`INSERT INTO rbac_data_access_policy_connections (id, policy_id, connection_id, created_at) VALUES (${randomUUID()}, ${policyId}, ${cid}, ${now()})`);
-          }
+          await run(sql`INSERT INTO rbac_data_access_policy_rules (id, policy_id, connection_id, database_pattern, table_pattern, is_allowed, priority, description, created_at, updated_at)
+            VALUES (${randomUUID()}, ${policyId}, ${r.connection_id ? String(r.connection_id) : null}, ${String(r.database_pattern ?? '*')}, ${String(r.table_pattern ?? '*')}, ${b(Boolean(r.is_allowed))}, ${Number(r.priority ?? 0)}, ${r.description != null ? String(r.description) : null}, ${now()}, ${now()})`);
         }
         return policyId;
       };

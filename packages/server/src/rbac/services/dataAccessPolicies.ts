@@ -1,14 +1,13 @@
 /**
  * Data Access Policies Service
  *
- * Named, reusable bundles of database/table access rules. A policy groups one or
- * more pattern rules, is scoped to one or more connections (or all connections),
- * and is attached to roles (many-to-many). Roles are the primary access-control
- * mechanism: a user's effective data access is the union of the rules in the
- * policies attached to their role(s).
+ * Named, reusable bundles of database/table access rules. Each rule may be scoped
+ * to a specific connection (or null = all connections). Policies are attached to
+ * roles (many-to-many). Roles are the primary access-control mechanism: a user's
+ * effective data access is the union of the rules in the policies on their role(s).
  */
 
-import { eq, and, inArray, desc, asc } from 'drizzle-orm';
+import { eq, and, inArray, desc, asc, or, isNull } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 import { getDatabase, getSchema } from '../db';
 
@@ -21,6 +20,7 @@ type AnyDb = any;
 // ============================================
 
 export interface PolicyRuleInput {
+  connectionId?: string | null;
   databasePattern: string;
   tablePattern: string;
   isAllowed?: boolean;
@@ -31,6 +31,7 @@ export interface PolicyRuleInput {
 export interface PolicyRuleResponse {
   id: string;
   policyId: string;
+  connectionId: string | null;
   databasePattern: string;
   tablePattern: string;
   isAllowed: boolean;
@@ -41,17 +42,13 @@ export interface PolicyRuleResponse {
 export interface DataAccessPolicyInput {
   name: string;
   description?: string | null;
-  allConnections?: boolean;
   isSystem?: boolean;
-  connectionIds?: string[];
   rules?: PolicyRuleInput[];
 }
 
 export interface DataAccessPolicyUpdate {
   name?: string;
   description?: string | null;
-  allConnections?: boolean;
-  connectionIds?: string[];
   rules?: PolicyRuleInput[];
 }
 
@@ -59,9 +56,7 @@ export interface DataAccessPolicyResponse {
   id: string;
   name: string;
   description: string | null;
-  allConnections: boolean;
   isSystem: boolean;
-  connectionIds: string[];
   rules: PolicyRuleResponse[];
   roleIds: string[];
   createdAt: Date;
@@ -72,6 +67,7 @@ export interface DataAccessPolicyResponse {
 /**
  * Minimal rule shape consumed by the access evaluator in `dataAccess.ts`.
  * Carries provenance (policyId/policyName) for debugging and self-service views.
+ * Connection filtering happens before this shape is produced.
  */
 export interface ResolvedPolicyRule {
   databasePattern: string;
@@ -94,6 +90,7 @@ function mapPolicyRule(row: AnyDb): PolicyRuleResponse {
   return {
     id: row.id,
     policyId: row.policyId,
+    connectionId: row.connectionId ?? null,
     databasePattern: row.databasePattern,
     tablePattern: row.tablePattern,
     isAllowed: Boolean(row.isAllowed),
@@ -119,7 +116,6 @@ export async function createPolicy(
     id,
     name: input.name,
     description: input.description ?? null,
-    allConnections: input.allConnections ?? false,
     isSystem: input.isSystem ?? false,
     createdAt: now,
     updatedAt: now,
@@ -128,9 +124,6 @@ export async function createPolicy(
 
   if (input.rules && input.rules.length > 0) {
     await replacePolicyRules(id, input.rules);
-  }
-  if (!input.allConnections && input.connectionIds && input.connectionIds.length > 0) {
-    await replacePolicyConnections(id, input.connectionIds);
   }
 
   return getPolicyById(id) as Promise<DataAccessPolicyResponse>;
@@ -148,14 +141,11 @@ export async function getPolicyById(id: string): Promise<DataAccessPolicyRespons
 
   const policy = rows[0];
 
-  const [ruleRows, connRows, roleRows] = await Promise.all([
+  const [ruleRows, roleRows] = await Promise.all([
     db.select()
       .from(schema.dataAccessPolicyRules)
       .where(eq(schema.dataAccessPolicyRules.policyId, id))
       .orderBy(desc(schema.dataAccessPolicyRules.priority), asc(schema.dataAccessPolicyRules.databasePattern)),
-    db.select()
-      .from(schema.dataAccessPolicyConnections)
-      .where(eq(schema.dataAccessPolicyConnections.policyId, id)),
     db.select()
       .from(schema.roleDataAccessPolicies)
       .where(eq(schema.roleDataAccessPolicies.policyId, id)),
@@ -165,9 +155,7 @@ export async function getPolicyById(id: string): Promise<DataAccessPolicyRespons
     id: policy.id,
     name: policy.name,
     description: policy.description ?? null,
-    allConnections: Boolean(policy.allConnections),
     isSystem: Boolean(policy.isSystem),
-    connectionIds: connRows.map((r: AnyDb) => r.connectionId),
     rules: ruleRows.map(mapPolicyRule),
     roleIds: roleRows.map((r: AnyDb) => r.roleId),
     createdAt: toDate(policy.createdAt),
@@ -184,7 +172,6 @@ export async function listPolicies(): Promise<DataAccessPolicyResponse[]> {
     .from(schema.dataAccessPolicies)
     .orderBy(asc(schema.dataAccessPolicies.name));
 
-  // N is small (admin-managed); resolve each policy's nested data sequentially-safe in parallel.
   return Promise.all(policies.map((p: AnyDb) => getPolicyById(p.id))) as Promise<DataAccessPolicyResponse[]>;
 }
 
@@ -201,7 +188,6 @@ export async function updatePolicy(
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (input.name !== undefined) updates.name = input.name;
   if (input.description !== undefined) updates.description = input.description;
-  if (input.allConnections !== undefined) updates.allConnections = input.allConnections;
 
   await db.update(schema.dataAccessPolicies)
     .set(updates)
@@ -209,14 +195,6 @@ export async function updatePolicy(
 
   if (input.rules !== undefined) {
     await replacePolicyRules(id, input.rules);
-  }
-
-  // When the policy is set to apply to all connections, clear any explicit links.
-  const allConnections = input.allConnections ?? existing.allConnections;
-  if (allConnections) {
-    await replacePolicyConnections(id, []);
-  } else if (input.connectionIds !== undefined) {
-    await replacePolicyConnections(id, input.connectionIds);
   }
 
   return getPolicyById(id);
@@ -232,7 +210,7 @@ export async function deletePolicy(id: string): Promise<boolean> {
 }
 
 // ============================================
-// Rules & connections (replace semantics)
+// Rules (replace semantics)
 // ============================================
 
 export async function replacePolicyRules(
@@ -252,6 +230,7 @@ export async function replacePolicyRules(
     rules.map((rule) => ({
       id: randomUUID(),
       policyId,
+      connectionId: rule.connectionId ?? null,
       databasePattern: rule.databasePattern,
       tablePattern: rule.tablePattern,
       isAllowed: rule.isAllowed ?? true,
@@ -259,30 +238,6 @@ export async function replacePolicyRules(
       description: rule.description ?? null,
       createdAt: now,
       updatedAt: now,
-    }))
-  );
-}
-
-export async function replacePolicyConnections(
-  policyId: string,
-  connectionIds: string[]
-): Promise<void> {
-  const db = getDatabase() as AnyDb;
-  const schema = getSchema();
-
-  await db.delete(schema.dataAccessPolicyConnections)
-    .where(eq(schema.dataAccessPolicyConnections.policyId, policyId));
-
-  if (connectionIds.length === 0) return;
-
-  const now = new Date();
-  const unique = Array.from(new Set(connectionIds));
-  await db.insert(schema.dataAccessPolicyConnections).values(
-    unique.map((connectionId) => ({
-      id: randomUUID(),
-      policyId,
-      connectionId,
-      createdAt: now,
     }))
   );
 }
@@ -356,9 +311,9 @@ export async function getPolicyIdsForRole(roleId: string): Promise<string[]> {
 
 /**
  * Resolve the flattened pattern rules granted to a set of roles, optionally
- * filtered to a connection. A policy contributes its rules when it applies to
- * all connections, or (when `connectionId` is given) when it is linked to that
- * connection. When `connectionId` is omitted, every attached policy contributes.
+ * filtered to a connection. A rule applies when its `connectionId` is null
+ * (all connections) or equals the given `connectionId`. When `connectionId` is
+ * omitted, every rule is returned.
  */
 export async function getPolicyRulesForRoleIds(
   roleIds: string[],
@@ -379,32 +334,23 @@ export async function getPolicyRulesForRoleIds(
   const policies = await db.select()
     .from(schema.dataAccessPolicies)
     .where(inArray(schema.dataAccessPolicies.id, policyIds));
+  const nameById = new Map<string, string>((policies as AnyDb[]).map((p) => [p.id, p.name]));
 
-  let applicablePolicies = policies as AnyDb[];
-
-  if (connectionId) {
-    const connLinks = await db.select()
-      .from(schema.dataAccessPolicyConnections)
-      .where(
-        and(
-          inArray(schema.dataAccessPolicyConnections.policyId, policyIds),
-          eq(schema.dataAccessPolicyConnections.connectionId, connectionId)
+  // Filter rules by connection: null connection (all) OR the requested connection.
+  const baseWhere = inArray(schema.dataAccessPolicyRules.policyId, policyIds);
+  const whereClause = connectionId
+    ? and(
+        baseWhere,
+        or(
+          isNull(schema.dataAccessPolicyRules.connectionId),
+          eq(schema.dataAccessPolicyRules.connectionId, connectionId)
         )
-      );
-    const scopedPolicyIds = new Set(connLinks.map((l: AnyDb) => l.policyId));
-    applicablePolicies = applicablePolicies.filter(
-      (p) => Boolean(p.allConnections) || scopedPolicyIds.has(p.id)
-    );
-  }
-
-  if (applicablePolicies.length === 0) return [];
-
-  const applicableIds = applicablePolicies.map((p) => p.id);
-  const nameById = new Map<string, string>(applicablePolicies.map((p) => [p.id, p.name]));
+      )
+    : baseWhere;
 
   const ruleRows = await db.select()
     .from(schema.dataAccessPolicyRules)
-    .where(inArray(schema.dataAccessPolicyRules.policyId, applicableIds));
+    .where(whereClause);
 
   return ruleRows.map((row: AnyDb) => ({
     databasePattern: row.databasePattern,

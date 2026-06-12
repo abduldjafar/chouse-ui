@@ -69,32 +69,28 @@ describe("dataAccessPolicies service", () => {
     expect(guestPolicy!.roleIds.length).toBeGreaterThan(0);
   });
 
-  it("creates a connection-scoped policy with rules", async () => {
+  it("creates a policy with per-rule connection scope", async () => {
     const created = await policies.createPolicy({
       name: "Analytics RO",
       description: "read analytics",
-      allConnections: false,
-      connectionIds: [connectionId],
       rules: [
-        { databasePattern: "analytics", tablePattern: "*", isAllowed: true, priority: 10 },
-        { databasePattern: "analytics", tablePattern: "secrets", isAllowed: false, priority: 20 },
+        { connectionId, databasePattern: "analytics", tablePattern: "*", isAllowed: true, priority: 10 },
+        { connectionId: null, databasePattern: "shared", tablePattern: "*", isAllowed: true, priority: 5 },
       ],
     });
     expect(created.id).toBeTruthy();
-    expect(created.allConnections).toBe(false);
-    expect(created.connectionIds).toEqual([connectionId]);
     expect(created.rules.length).toBe(2);
+    expect(created.rules.find((r) => r.databasePattern === "analytics")!.connectionId).toBe(connectionId);
+    expect(created.rules.find((r) => r.databasePattern === "shared")!.connectionId).toBeNull();
 
     const fetched = await policies.getPolicyById(created.id);
     expect(fetched!.name).toBe("Analytics RO");
   });
 
-  it("resolves rules for a role only on the scoped connection", async () => {
+  it("resolves a connection-scoped rule only on that connection", async () => {
     const created = await policies.createPolicy({
       name: "Scoped",
-      allConnections: false,
-      connectionIds: [connectionId],
-      rules: [{ databasePattern: "scoped_db", tablePattern: "*", isAllowed: true, priority: 0 }],
+      rules: [{ connectionId, databasePattern: "scoped_db", tablePattern: "*", isAllowed: true, priority: 0 }],
     });
     await policies.setPoliciesForRole(analystRoleId, [created.id]);
 
@@ -105,11 +101,10 @@ describe("dataAccessPolicies service", () => {
     expect(otherConn.some((r) => r.databasePattern === "scoped_db")).toBe(false);
   });
 
-  it("resolves all-connections policies everywhere", async () => {
+  it("resolves a null-connection (all connections) rule everywhere", async () => {
     const created = await policies.createPolicy({
       name: "Global RO",
-      allConnections: true,
-      rules: [{ databasePattern: "global_db", tablePattern: "*", isAllowed: true, priority: 0 }],
+      rules: [{ connectionId: null, databasePattern: "global_db", tablePattern: "*", isAllowed: true, priority: 0 }],
     });
     await policies.setPoliciesForRole(analystRoleId, [created.id]);
 
@@ -120,8 +115,7 @@ describe("dataAccessPolicies service", () => {
   it("links/unlinks policies to roles and reports usage", async () => {
     const created = await policies.createPolicy({
       name: "Linkable",
-      allConnections: true,
-      rules: [{ databasePattern: "x", tablePattern: "*", isAllowed: true, priority: 0 }],
+      rules: [{ connectionId: null, databasePattern: "x", tablePattern: "*", isAllowed: true, priority: 0 }],
     });
     await policies.setPoliciesForRole(analystRoleId, [created.id]);
 
@@ -138,8 +132,7 @@ describe("dataAccessPolicies service", () => {
   it("updates and deletes a policy", async () => {
     const created = await policies.createPolicy({
       name: "Temp",
-      allConnections: true,
-      rules: [{ databasePattern: "t", tablePattern: "*", isAllowed: true, priority: 0 }],
+      rules: [{ connectionId: null, databasePattern: "t", tablePattern: "*", isAllowed: true, priority: 0 }],
     });
     const updated = await policies.updatePolicy(created.id, { name: "Temp Renamed" });
     expect(updated!.name).toBe("Temp Renamed");

@@ -1170,6 +1170,8 @@ export interface AccessCheckResult {
 
 export interface DataAccessPolicyRule {
   id?: string;
+  // null = applies to all connections
+  connectionId?: string | null;
   databasePattern: string;
   tablePattern: string;
   isAllowed: boolean;
@@ -1181,9 +1183,7 @@ export interface DataAccessPolicy {
   id: string;
   name: string;
   description: string | null;
-  allConnections: boolean;
   isSystem: boolean;
-  connectionIds: string[];
   rules: DataAccessPolicyRule[];
   roleIds: string[];
   createdAt: string;
@@ -1194,16 +1194,12 @@ export interface DataAccessPolicy {
 export interface CreateDataAccessPolicyInput {
   name: string;
   description?: string | null;
-  allConnections?: boolean;
-  connectionIds?: string[];
   rules: Omit<DataAccessPolicyRule, 'id'>[];
 }
 
 export interface UpdateDataAccessPolicyInput {
   name?: string;
   description?: string | null;
-  allConnections?: boolean;
-  connectionIds?: string[];
   rules?: Omit<DataAccessPolicyRule, 'id'>[];
 }
 

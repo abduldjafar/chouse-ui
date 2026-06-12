@@ -800,7 +800,9 @@ export const RoleFormDialog: React.FC<RoleFormDialogProps> = ({
                               {policy.name}
                             </span>
                             <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">
-                              {policy.allConnections ? 'All connections' : `${policy.connectionIds.length} connection(s)`}
+                              {policy.rules.some((r) => (r.connectionId ?? null) === null)
+                                ? 'All connections'
+                                : `${new Set(policy.rules.map((r) => r.connectionId).filter(Boolean)).size} connection(s)`}
                               {' · '}{policy.rules.length} rule(s)
                             </p>
                             {policy.description && (
