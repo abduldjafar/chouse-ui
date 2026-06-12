@@ -942,40 +942,6 @@ export const rbacConnectionsApi = {
   },
 
   /**
-   * Get users with access to a connection
-   */
-  async getUsers(connectionId: string): Promise<Array<{
-    id: string;
-    email: string;
-    username: string;
-    displayName: string | null;
-    isActive: boolean;
-    roles: string[];
-    hasDirectAccess: boolean;
-    accessViaRoles: string[];
-  }>> {
-    return rbacFetch(`/connections/${connectionId}/users`);
-  },
-
-  /**
-   * Grant user access to a connection
-   */
-  async grantAccess(connectionId: string, userId: string): Promise<void> {
-    await rbacFetch(`/connections/${connectionId}/access/${userId}`, {
-      method: 'POST',
-    });
-  },
-
-  /**
-   * Revoke user access to a connection
-   */
-  async revokeAccess(connectionId: string, userId: string): Promise<void> {
-    await rbacFetch(`/connections/${connectionId}/access/${userId}`, {
-      method: 'DELETE',
-    });
-  },
-
-  /**
    * Connect to a saved connection (creates ClickHouse session)
    */
   async connect(id: string): Promise<ConnectResult> {

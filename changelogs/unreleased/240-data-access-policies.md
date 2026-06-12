@@ -11,5 +11,6 @@ type: major
 
 ### Removed
 - **User-level data access rules** — per-user database/table rules and their UI (the data access section in user create/edit) have been removed. Data access is granted through the role's policies only. The `/rbac/data-access/user/*` endpoints, the `bulkSetForUser` client method, and the per-rule `accessType` field are gone (access type is determined by role permissions).
+- **Per-user connection access** — the "Manage Access" UI on connections and the `rbac_user_connections` table are removed. Whether a user can open a connection is now derived from the data access policies on their role: a rule scoped to a connection grants it, and a rule scoped to all connections grants every connection.
 
 > **Note for operators:** after upgrading, non-admin users see no databases until an admin attaches a data access policy to their role (this matches prior secure-by-default behaviour; existing users' access is preserved by the migration).

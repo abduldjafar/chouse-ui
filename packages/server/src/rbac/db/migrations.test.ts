@@ -96,6 +96,10 @@ const VERSION_CHECKS: Record<string, () => Promise<void>> = {
     expect(await h.tableExists("rbac_data_access_rules")).toBe(false);
     expect(await h.indexExists("user_roles_user_unique_idx")).toBe(true);
   },
+  "1.28.0": async () => {
+    // Per-user connection access is gone; access is derived from role policies.
+    expect(await h.tableExists("rbac_user_connections")).toBe(false);
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -261,8 +265,8 @@ for (const dialect of DIALECTS) {
       await assignRole(userAdmin, admin);
       await assignRole(userAdmin, viewer);
 
-      // Apply the data-access migration + the drop.
-      await runMigrations({ skipSeed: true, through: "1.27.0" });
+      // Apply the data-access migration + the drops (through HEAD).
+      await runMigrations({ skipSeed: true });
     }, 60_000);
 
     it("dropped the legacy table and added the one-role index", async () => {

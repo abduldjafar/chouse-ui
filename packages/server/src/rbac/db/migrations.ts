@@ -44,7 +44,7 @@ export interface MigrationResult {
 // Current App Version
 // ============================================
 
-export const APP_VERSION = '1.27.0';
+export const APP_VERSION = '1.28.0';
 
 // ============================================
 // Error Helpers
@@ -2984,6 +2984,19 @@ export const MIGRATIONS: Migration[] = [
         await (db as PostgresDb).execute(sql`DROP TABLE IF EXISTS rbac_data_access_rules`);
       }
       logger.info({ module: 'RBAC', phase: 'migration' }, '[Migration 1.27.0] Dropped legacy rbac_data_access_rules table');
+    },
+  },
+  {
+    version: '1.28.0',
+    name: 'drop_user_connections',
+    description: 'Drop rbac_user_connections — connection access is now derived from data access policies attached to roles',
+    up: async (db) => {
+      if (getDatabaseType() === 'sqlite') {
+        (db as SqliteDb).run(sql`DROP TABLE IF EXISTS rbac_user_connections`);
+      } else {
+        await (db as PostgresDb).execute(sql`DROP TABLE IF EXISTS rbac_user_connections`);
+      }
+      logger.info({ module: 'RBAC', phase: 'migration' }, '[Migration 1.28.0] Dropped rbac_user_connections table');
     },
   },
 ];

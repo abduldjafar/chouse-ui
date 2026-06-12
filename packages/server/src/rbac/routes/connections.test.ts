@@ -26,10 +26,8 @@ mock.module("../services/connections", () => ({
     getDefaultConnection: mockGetDefaultConnection,
     testConnection: mockTestConnection,
     testSavedConnection: mockTestSavedConnection,
-    // Add missing ones if needed
-    grantConnectionAccess: mock(),
-    revokeConnectionAccess: mock(),
-    getConnectionUsers: mock(),
+    listConnectionDatabases: mock(),
+    listConnectionTables: mock(),
 }));
 
 const mockUserHasPermission = mock();

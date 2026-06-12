@@ -19,9 +19,6 @@ import {
   testSavedConnection,
   getDefaultConnection,
   getUserConnections,
-  getConnectionUsers,
-  grantConnectionAccess,
-  revokeConnectionAccess,
 } from '../services/connections';
 import { requestLogger } from '../../utils/logger';
 import { rbacAuthMiddleware, requirePermission, getRbacUser, getClientIp } from '../middleware';
@@ -656,128 +653,8 @@ connectionsRoutes.get(
   }
 );
 
-// Grant user access to connection (requires connections:edit permission)
-connectionsRoutes.post(
-  '/:id/access/:userId',
-  rbacAuthMiddleware,
-  requirePermission(PERMISSIONS.CONNECTIONS_EDIT),
-  async (c) => {
-    try {
-      const user = getRbacUser(c);
-      const connectionId = c.req.param('id');
-      const targetUserId = c.req.param('userId');
-
-      await grantConnectionAccess(targetUserId, connectionId);
-
-      // Log audit event
-      await createAuditLogWithContext(c, AUDIT_ACTIONS.CONNECTION_GRANT_ACCESS, user.sub, {
-        resourceType: 'user_connection',
-        resourceId: `${targetUserId}:${connectionId}`,
-        details: {
-          operation: 'grant_access',
-          targetUserId,
-          connectionId,
-        },
-        ipAddress: getClientIp(c),
-      });
-
-      return c.json({
-        success: true,
-        data: { granted: true },
-      });
-    } catch (error) {
-      requestLogger(c.get('requestId')).error({ module: 'Connections', err: error instanceof Error ? error.message : String(error) }, 'Grant access error');
-      return c.json({
-        success: false,
-        error: {
-          code: 'GRANT_FAILED',
-          message: 'Failed to grant connection access',
-        },
-      }, 500);
-    }
-  }
-);
-
-// Revoke user access to connection (requires connections:delete permission)
-connectionsRoutes.delete(
-  '/:id/access/:userId',
-  rbacAuthMiddleware,
-  requirePermission(PERMISSIONS.CONNECTIONS_DELETE),
-  async (c) => {
-    try {
-      const user = getRbacUser(c);
-      const connectionId = c.req.param('id');
-      const targetUserId = c.req.param('userId');
-
-      await revokeConnectionAccess(targetUserId, connectionId);
-
-      // Log audit event
-      await createAuditLogWithContext(c, AUDIT_ACTIONS.CONNECTION_REVOKE_ACCESS, user.sub, {
-        resourceType: 'user_connection',
-        resourceId: `${targetUserId}:${connectionId}`,
-        details: {
-          operation: 'revoke_access',
-          targetUserId,
-          connectionId,
-        },
-        ipAddress: getClientIp(c),
-      });
-
-      return c.json({
-        success: true,
-        data: { revoked: true },
-      });
-    } catch (error) {
-      requestLogger(c.get('requestId')).error({ module: 'Connections', err: error instanceof Error ? error.message : String(error) }, 'Revoke access error');
-      return c.json({
-        success: false,
-        error: {
-          code: 'REVOKE_FAILED',
-          message: 'Failed to revoke connection access',
-        },
-      }, 500);
-    }
-  }
-);
-
-// Get users with access to a connection (requires connections:view permission)
-connectionsRoutes.get(
-  '/:id/users',
-  rbacAuthMiddleware,
-  requirePermission(PERMISSIONS.CONNECTIONS_VIEW),
-  async (c) => {
-    try {
-      const connectionId = c.req.param('id');
-
-      // Verify connection exists
-      const connection = await getConnectionById(connectionId);
-      if (!connection) {
-        return c.json({
-          success: false,
-          error: {
-            code: 'NOT_FOUND',
-            message: 'Connection not found',
-          },
-        }, 404);
-      }
-
-      const users = await getConnectionUsers(connectionId);
-
-      return c.json({
-        success: true,
-        data: users,
-      });
-    } catch (error) {
-      requestLogger(c.get('requestId')).error({ module: 'Connections', err: error instanceof Error ? error.message : String(error) }, 'Get users error');
-      return c.json({
-        success: false,
-        error: {
-          code: 'FETCH_FAILED',
-          message: error instanceof Error ? error.message : 'Failed to fetch users',
-        },
-      }, 500);
-    }
-  }
-);
+// Note: per-user connection access (grant/revoke/list-users) has been removed.
+// Connection access is now derived entirely from the data access policies attached
+// to a user's role — see getUserConnections() and the Data Access admin tab.
 
 export default connectionsRoutes;

@@ -689,229 +689,18 @@ export async function testSavedConnection(id: string): Promise<TestConnectionRes
   });
 }
 
-// ============================================
-// User Connection Access
-// ============================================
-
 /**
- * Grant user access to a connection
- */
-export async function grantConnectionAccess(
-  userId: string,
-  connectionId: string
-): Promise<boolean> {
-  const db = getDatabase() as AnyDb;
-  const schema = getSchema();
-
-  // Check if already exists
-  const existing = await db.select()
-    .from(schema.userConnections)
-    .where(and(
-      eq(schema.userConnections.userId, userId),
-      eq(schema.userConnections.connectionId, connectionId)
-    ))
-    .limit(1);
-
-  if (existing.length > 0) {
-    // Update to enable access
-    await db.update(schema.userConnections)
-      .set({ canUse: true })
-      .where(eq(schema.userConnections.id, existing[0].id));
-    return true;
-  }
-
-  // Create new access record
-  await db.insert(schema.userConnections).values({
-    id: randomUUID(),
-    userId,
-    connectionId,
-    canUse: true,
-    createdAt: new Date(),
-  });
-
-  return true;
-}
-
-/**
- * Revoke user access to a connection
- */
-export async function revokeConnectionAccess(
-  userId: string,
-  connectionId: string
-): Promise<boolean> {
-  const db = getDatabase() as AnyDb;
-  const schema = getSchema();
-
-  await db.delete(schema.userConnections)
-    .where(and(
-      eq(schema.userConnections.userId, userId),
-      eq(schema.userConnections.connectionId, connectionId)
-    ));
-
-  return true;
-}
-
-/**
- * Get users with access to a connection
- */
-export async function getConnectionUsers(connectionId: string): Promise<Array<{
-  id: string;
-  email: string;
-  username: string;
-  displayName: string | null;
-  isActive: boolean;
-  roles: string[];
-  hasDirectAccess: boolean;
-  accessViaRoles: string[];
-}>> {
-  const db = getDatabase() as AnyDb;
-  const schema = getSchema();
-
-  // Get users with direct access (userConnections table)
-  const userConnections = await db.select({
-    userId: schema.userConnections.userId,
-  })
-    .from(schema.userConnections)
-    .where(and(
-      eq(schema.userConnections.connectionId, connectionId),
-      eq(schema.userConnections.canUse, true)
-    ));
-
-  const directAccessUserIds = new Set(userConnections.map((uc: { userId: string }) => uc.userId));
-
-  // Get all users who have direct access
-  const directAccessUsers = directAccessUserIds.size > 0
-    ? await db.select()
-      .from(schema.users)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .where(inArray(schema.users.id as any, Array.from(directAccessUserIds)))
-    : [];
-
-  // Get roles that grant access to this connection via a data access policy with
-  // a rule scoped to it (policy rule -> connection, then role -> policy link).
-  const policyLinks = await db.select({ policyId: schema.dataAccessPolicyRules.policyId })
-    .from(schema.dataAccessPolicyRules)
-    .where(eq(schema.dataAccessPolicyRules.connectionId, connectionId));
-
-  const scopedPolicyIds = Array.from(new Set(policyLinks.map((l: { policyId: string }) => l.policyId)));
-
-  const roleIdsFromRules = new Set<string>();
-  if (scopedPolicyIds.length > 0) {
-    const roleLinks = await db.select({ roleId: schema.roleDataAccessPolicies.roleId })
-      .from(schema.roleDataAccessPolicies)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .where(inArray(schema.roleDataAccessPolicies.policyId as any, scopedPolicyIds));
-    roleLinks.forEach((l: { roleId: string }) => roleIdsFromRules.add(l.roleId));
-  }
-
-  // Get users from role-based policies
-  const usersFromRoles: User[] = [];
-  if (roleIdsFromRules.size > 0) {
-    const userRoles = await db.select()
-      .from(schema.userRoles)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .where(inArray(schema.userRoles.roleId as any, Array.from(roleIdsFromRules)));
-
-    const userIdsFromRoles = new Set(userRoles.map((ur: UserRole) => ur.userId));
-
-    if (userIdsFromRoles.size > 0) {
-      const users = await db.select()
-        .from(schema.users)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .where(inArray(schema.users.id as any, Array.from(userIdsFromRoles)));
-      usersFromRoles.push(...users);
-    }
-  }
-
-  // Combine all users and deduplicate
-  const allUserIds = new Set<string>();
-  const userMap = new Map<string, User>();
-
-  [...directAccessUsers, ...usersFromRoles].forEach((user: User) => {
-    if (!allUserIds.has(user.id)) {
-      allUserIds.add(user.id);
-      userMap.set(user.id, user);
-    }
-  });
-
-  // Build response with access information
-  const result: Array<{
-    id: string;
-    email: string;
-    username: string;
-    displayName: string | null;
-    isActive: boolean;
-    roles: string[];
-    hasDirectAccess: boolean;
-    accessViaRoles: string[];
-  }> = [];
-
-  for (const user of userMap.values()) {
-    const hasDirectAccess = directAccessUserIds.has(user.id);
-
-    // Get user's roles
-    const userRoles = await db.select({
-      roleId: schema.userRoles.roleId,
-      roleName: schema.roles.name,
-    })
-      .from(schema.userRoles)
-      .innerJoin(schema.roles, eq(schema.userRoles.roleId, schema.roles.id))
-      .where(eq(schema.userRoles.userId, user.id));
-
-    const roleNames = userRoles.map((ur: { roleName: string; roleId: string }) => ur.roleName);
-
-    // Determine which roles grant access via data access rules
-    const accessViaRoles = userRoles
-      .filter((ur: { roleName: string; roleId: string }) => roleIdsFromRules.has(ur.roleId))
-      .map((ur: { roleName: string; roleId: string }) => ur.roleName);
-
-    result.push({
-      id: user.id,
-      email: user.email,
-      username: user.username,
-      displayName: user.displayName,
-      isActive: user.isActive,
-      roles: roleNames,
-      hasDirectAccess,
-      accessViaRoles,
-    });
-  }
-
-  return result;
-}
-
-/**
- * Get connections accessible by a user
- * Considers both userConnections table AND data access rules with specific connectionIds
+ * Get connections accessible by a user.
+ *
+ * Connection access is derived entirely from the data access policies attached to
+ * the user's role(s): an *allow* rule scoped to a connection grants that connection,
+ * and an *allow* rule with connectionId = null (all connections) grants every active
+ * connection. (Super admins bypass this and see all connections elsewhere.)
  */
 export async function getUserConnections(userId: string): Promise<ConnectionResponse[]> {
   const db = getDatabase() as AnyDb;
   const schema = getSchema();
 
-  // A user can reach a connection through two channels, and we union them:
-  //   1. Direct grant   — a row in userConnections (canUse=true), set via "Manage Access".
-  //   2. Data-access policy — a policy attached to one of the user's roles that is
-  //      scoped to a *specific* connection (policy -> connection link). An admin who
-  //      scopes "Analytics Read-Only" to localhost 1 clearly intends those users to be
-  //      able to open localhost 1, so that policy grants the connection itself too.
-  //
-  // Policies with allConnections = true are global db/table scopes and do NOT grant any
-  // connection (they'd otherwise hand the user every connection at once). Once inside a
-  // connection, the data-access evaluator still scopes which databases/tables are visible.
-  const connectionIdSet = new Set<string>();
-
-  // 1) Direct connection grants (userConnections table).
-  const userConns = await db.select()
-    .from(schema.userConnections)
-    .where(and(
-      eq(schema.userConnections.userId, userId),
-      eq(schema.userConnections.canUse, true)
-    ));
-  userConns.forEach((uc: { connectionId: string }) => {
-    connectionIdSet.add(uc.connectionId);
-  });
-
-  // 2) Connections named by a connection-scoped data-access policy on the user's role(s).
   const roleRows = await db.select({ roleId: schema.userRoles.roleId })
     .from(schema.userRoles)
     .where(eq(schema.userRoles.userId, userId));
@@ -919,46 +708,45 @@ export async function getUserConnections(userId: string): Promise<ConnectionResp
     .map((r: { roleId: string | null }) => r.roleId)
     .filter((rid: string | null): rid is string => Boolean(rid));
 
-  let viaPolicyCount = 0;
-  if (roleIds.length > 0) {
-    const policyLinks = await db.select({ policyId: schema.roleDataAccessPolicies.policyId })
-      .from(schema.roleDataAccessPolicies)
-      .where(inArray(schema.roleDataAccessPolicies.roleId, roleIds));
-    const policyIds = Array.from(new Set(policyLinks.map((l: { policyId: string }) => l.policyId)));
+  if (roleIds.length === 0) return [];
 
-    if (policyIds.length > 0) {
-      // A policy rule scoped to a specific connection grants that connection.
-      // Global rules (connectionId = null) do not grant any specific connection.
-      const connLinks = await db.select({ connectionId: schema.dataAccessPolicyRules.connectionId })
-        .from(schema.dataAccessPolicyRules)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .where(inArray(schema.dataAccessPolicyRules.policyId as any, policyIds));
-      connLinks.forEach((r: { connectionId: string | null }) => {
-        if (r.connectionId) connectionIdSet.add(r.connectionId);
-      });
-      viaPolicyCount = connectionIdSet.size;
-    }
+  const policyLinks = await db.select({ policyId: schema.roleDataAccessPolicies.policyId })
+    .from(schema.roleDataAccessPolicies)
+    .where(inArray(schema.roleDataAccessPolicies.roleId, roleIds));
+  const policyIds = Array.from(new Set(policyLinks.map((l: { policyId: string }) => l.policyId)));
+  if (policyIds.length === 0) return [];
+
+  const ruleRows = await db.select({
+    connectionId: schema.dataAccessPolicyRules.connectionId,
+    isAllowed: schema.dataAccessPolicyRules.isAllowed,
+  })
+    .from(schema.dataAccessPolicyRules)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .where(inArray(schema.dataAccessPolicyRules.policyId as any, policyIds));
+
+  let grantsAll = false;
+  const connectionIdSet = new Set<string>();
+  for (const r of ruleRows as Array<{ connectionId: string | null; isAllowed: boolean | number }>) {
+    if (!r.isAllowed) continue;
+    if (r.connectionId === null) grantsAll = true;
+    else connectionIdSet.add(r.connectionId);
   }
 
   logger.debug(
-    { module: 'Connections', userId, direct: userConns.length, viaPolicies: viaPolicyCount, total: connectionIdSet.size },
+    { module: 'Connections', userId, grantsAll, scoped: connectionIdSet.size },
     'getUserConnections',
   );
 
-  if (connectionIdSet.size === 0) {
-    logger.debug({ module: 'Connections', userId }, 'User has no connection access');
-    return [];
-  }
+  if (!grantsAll && connectionIdSet.size === 0) return [];
 
-  // Get the filtered connections
-  const connectionIds = Array.from(connectionIdSet);
+  const baseActive = eq(schema.clickhouseConnections.isActive, true);
+  const whereClause = grantsAll
+    ? baseActive
+    : and(inArray(schema.clickhouseConnections.id, Array.from(connectionIdSet)), baseActive);
 
   const connections = await db.select()
     .from(schema.clickhouseConnections)
-    .where(and(
-      inArray(schema.clickhouseConnections.id, connectionIds),
-      eq(schema.clickhouseConnections.isActive, true)
-    ))
+    .where(whereClause)
     .orderBy(desc(schema.clickhouseConnections.isDefault), asc(schema.clickhouseConnections.name));
 
   return connections.map((conn: any) => ({

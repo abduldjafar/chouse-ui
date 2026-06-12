@@ -242,20 +242,6 @@ export const clickhouseConnections = sqliteTable('rbac_clickhouse_connections', 
 }));
 
 // ============================================
-// User-Connection Access Table
-// ============================================
-
-export const userConnections = sqliteTable('rbac_user_connections', {
-  id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  connectionId: text('connection_id').notNull().references(() => clickhouseConnections.id, { onDelete: 'cascade' }),
-  canUse: integer('can_use', { mode: 'boolean' }).notNull().default(true),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-}, (table) => ({
-  userConnIdx: uniqueIndex('user_conn_user_conn_idx').on(table.userId, table.connectionId),
-}));
-
-// ============================================
 // Data Access Rules Table
 // Defines which databases/tables a role OR user can access
 // Either roleId OR userId must be set (not both)
