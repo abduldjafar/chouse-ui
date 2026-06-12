@@ -5,12 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-
-- SSO identity management on the user's Security tab: shows each linked provider with its email and last sign-in, and lets admins unlink an identity (`USERS_UPDATE`), with a warning that an SSO-only user will be locked out until their password is reset.
-
 ## [v3.0.0] - 2026-06-12
 
 ### Added
