@@ -1620,6 +1620,77 @@ export async function checkRbacHealth(): Promise<{
 }
 
 // ============================================
+// SSO Admin API
+// ============================================
+
+export interface SsoAdminSettings {
+  enabled: boolean;
+  baseUrl: string | null;
+  defaultRole: string;
+  autoLinkByEmail: boolean;
+  source: 'config' | 'database';
+}
+
+export interface SsoAdminProvider {
+  id: string;
+  type: 'oidc' | 'oauth2';
+  displayName: string;
+  source: 'config' | 'database';
+  enabled: boolean;
+  hasSecret: boolean;
+  issuer?: string | null;
+  authorizationEndpoint?: string | null;
+  tokenEndpoint?: string | null;
+  userinfoEndpoint?: string | null;
+  clientId?: string;
+  scopes?: string;
+  claimMapping?: string | null;
+  roleMappingClaim?: string | null;
+  roleMapping?: string | null;
+  linkedUserCount?: number;
+}
+
+export interface SsoTestResult {
+  ok: boolean;
+  err?: string;
+  code?: string;
+  oauthError?: string;
+  oauthErrorDescription?: string;
+  cause?: string;
+}
+
+export const rbacSsoAdminApi = {
+  async getSettings(): Promise<SsoAdminSettings> {
+    return rbacFetch<SsoAdminSettings>('/sso-admin/settings');
+  },
+
+  async updateSettings(input: Omit<SsoAdminSettings, 'source'>): Promise<void> {
+    await rbacFetch('/sso-admin/settings', { method: 'PUT', body: JSON.stringify(input) });
+  },
+
+  async getProviders(): Promise<SsoAdminProvider[]> {
+    const r = await rbacFetch<{ providers: SsoAdminProvider[] }>('/sso-admin/providers');
+    return r.providers;
+  },
+
+  async createProvider(input: Record<string, unknown>): Promise<{ id: string }> {
+    return rbacFetch('/sso-admin/providers', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  async updateProvider(id: string, input: Record<string, unknown>): Promise<void> {
+    await rbacFetch(`/sso-admin/providers/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+  },
+
+  async deleteProvider(id: string): Promise<{ unlinkedUserCount: number }> {
+    return rbacFetch(`/sso-admin/providers/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  async testProvider(input: Record<string, unknown>): Promise<SsoTestResult> {
+    return rbacFetch('/sso-admin/providers/test', { method: 'POST', body: JSON.stringify(input) });
+  },
+};
+
+// ============================================
 // SSO API
 // ============================================
 

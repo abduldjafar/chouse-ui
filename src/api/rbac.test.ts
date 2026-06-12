@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { ssoApi, rbacDataAccessPoliciesApi, rbacUsersApi } from './rbac';
+import { ssoApi, rbacDataAccessPoliciesApi, rbacUsersApi, rbacSsoAdminApi } from './rbac';
 import { RBAC_ACCESS_TOKEN_KEY, RBAC_REFRESH_TOKEN_KEY } from './client';
 import { server } from '../test/mocks/server';
 import { http, HttpResponse } from 'msw';
@@ -346,5 +346,77 @@ describe('rbacUsersApi.unlinkIdentity', () => {
       message: 'SSO identity not found for this user',
       statusCode: 404,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// rbacSsoAdminApi
+// ---------------------------------------------------------------------------
+
+describe('rbacSsoAdminApi', () => {
+  beforeEach(() => {
+    localStorage.setItem(RBAC_ACCESS_TOKEN_KEY, 'access-token');
+  });
+
+  it('getProviders returns merged list', async () => {
+    server.use(
+      http.get('/api/rbac/sso-admin/providers', () =>
+        HttpResponse.json({
+          success: true,
+          data: { providers: [{ id: 'google', source: 'config', displayName: 'Google', type: 'oidc', enabled: true, hasSecret: true }] },
+        })
+      )
+    );
+    const providers = await rbacSsoAdminApi.getProviders();
+    expect(providers[0].id).toBe('google');
+  });
+
+  it('createProvider POSTs the body and returns the new id', async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.post('/api/rbac/sso-admin/providers', async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({ success: true, data: { id: 'okta' } }, { status: 201 });
+      })
+    );
+    const result = await rbacSsoAdminApi.createProvider({ id: 'okta', type: 'oidc', displayName: 'Okta', clientId: 'cid', clientSecret: 'sek', scopes: 'openid' });
+    expect(result).toEqual({ id: 'okta' });
+    expect(capturedBody).toMatchObject({ id: 'okta', type: 'oidc' });
+  });
+
+  it('deleteProvider DELETEs and returns unlinkedUserCount', async () => {
+    server.use(
+      http.delete('/api/rbac/sso-admin/providers/okta', () =>
+        HttpResponse.json({ success: true, data: { unlinkedUserCount: 3, message: 'SSO provider deleted' } })
+      )
+    );
+    const result = await rbacSsoAdminApi.deleteProvider('okta');
+    expect(result.unlinkedUserCount).toBe(3);
+  });
+
+  it('testProvider returns the test result (ok false with cause)', async () => {
+    server.use(
+      http.post('/api/rbac/sso-admin/providers/test', () =>
+        HttpResponse.json({ success: true, data: { ok: false, err: 'discovery failed', cause: 'ENOTFOUND' } })
+      )
+    );
+    const r = await rbacSsoAdminApi.testProvider({ type: 'oidc', issuer: 'https://x', clientId: 'c', clientSecret: 's' });
+    expect(r.ok).toBe(false);
+    expect((r as { cause?: string }).cause).toBe('ENOTFOUND');
+  });
+
+  it('updateSettings PUTs the settings body', async () => {
+    let capturedBody: unknown = null;
+    let capturedMethod: string | null = null;
+    server.use(
+      http.put('/api/rbac/sso-admin/settings', async ({ request }) => {
+        capturedBody = await request.json();
+        capturedMethod = request.method;
+        return HttpResponse.json({ success: true, data: { message: 'SSO settings updated' } });
+      })
+    );
+    await rbacSsoAdminApi.updateSettings({ enabled: true, baseUrl: 'https://app.example.com', defaultRole: 'viewer', autoLinkByEmail: true });
+    expect(capturedMethod).toBe('PUT');
+    expect(capturedBody).toMatchObject({ enabled: true, baseUrl: 'https://app.example.com' });
   });
 });
