@@ -10,7 +10,7 @@ export * from './base';
 // Database-specific schemas are imported dynamically based on DB_TYPE
 // This file serves as the main entry point for schema types
 
-import type { User, Role, Permission, Session, AuditLog, ApiKey, ClickHouseConnection, ClickHouseUserMetadata, DataAccessRule, UserRole, AiProvider, AiModel, AiConfig } from './sqlite';
+import type { User, Role, Permission, Session, AuditLog, ApiKey, ClickHouseConnection, ClickHouseUserMetadata, UserRole, AiProvider, AiModel, AiConfig } from './sqlite';
 
 // Re-export common types (shape is same for both SQLite and PostgreSQL)
 export type {
@@ -22,7 +22,6 @@ export type {
   ApiKey,
   ClickHouseConnection,
   ClickHouseUserMetadata,
-  DataAccessRule,
   UserRole,
   AiProvider,
   AiModel,
@@ -73,6 +72,7 @@ export interface RoleResponse {
   isDefault: boolean;
   priority: number;
   permissions: string[];
+  dataAccessPolicyIds: string[];
   userCount?: number;
 }
 
@@ -107,6 +107,7 @@ export interface CreateRoleInput {
   displayName: string;
   description?: string;
   permissionIds: string[];
+  dataAccessPolicyIds?: string[];
   isDefault?: boolean;
 }
 
@@ -114,5 +115,6 @@ export interface UpdateRoleInput {
   displayName?: string;
   description?: string | null;
   permissionIds?: string[];
+  dataAccessPolicyIds?: string[];
   isDefault?: boolean;
 }

@@ -28,7 +28,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
-  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,7 +74,6 @@ import {
   type TestConnectionResult,
 } from '@/api/rbac';
 import { useRbacStore, RBAC_PERMISSIONS } from '@/stores';
-import ConnectionUserAccess from './ConnectionUserAccess';
 import { SkeletonRows } from '@/components/common/Skeletons';
 
 // ============================================
@@ -493,7 +491,6 @@ export default function ConnectionManagement() {
   const [editingConnection, setEditingConnection] = useState<ClickHouseConnection | undefined>();
   const [deleteConnection, setDeleteConnection] = useState<ClickHouseConnection | null>(null);
   const [testingConnectionId, setTestingConnectionId] = useState<string | null>(null);
-  const [userAccessConnection, setUserAccessConnection] = useState<ClickHouseConnection | null>(null);
 
   const { hasPermission } = useRbacStore();
   const canEdit = hasPermission(RBAC_PERMISSIONS.CONNECTIONS_EDIT);
@@ -576,9 +573,6 @@ export default function ConnectionManagement() {
     setIsFormOpen(true);
   };
 
-  const openUserAccessDialog = (connection: ClickHouseConnection) => {
-    setUserAccessConnection(connection);
-  };
 
   return (
     <div className="p-6">
@@ -657,7 +651,6 @@ export default function ConnectionManagement() {
                   <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">User</TableHead>
                   <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Database</TableHead>
                   <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Status</TableHead>
-                  <TableHead className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Users</TableHead>
                   <TableHead className="text-right font-mono text-[10px] uppercase tracking-[0.14em] text-paper-faint">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -706,22 +699,6 @@ export default function ConnectionManagement() {
                           Inactive
                         </span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openUserAccessDialog(conn)}
-                            className="h-8 gap-1.5 text-paper-muted hover:bg-ink-200 hover:text-paper"
-                          >
-                            <Users className="w-4 h-4" />
-                            Manage Access
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Manage user access to this connection</TooltipContent>
-                      </Tooltip>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -826,15 +803,6 @@ export default function ConnectionManagement() {
         variant="danger"
       />
 
-      {/* User Access Dialog */}
-      {userAccessConnection && (
-        <ConnectionUserAccess
-          connection={userAccessConnection}
-          isOpen={!!userAccessConnection}
-          onClose={() => setUserAccessConnection(null)}
-          onUpdate={fetchConnections}
-        />
-      )}
     </div>
   );
 }

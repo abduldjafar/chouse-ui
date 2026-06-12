@@ -242,59 +242,54 @@ export const clickhouseConnections = pgTable('rbac_clickhouse_connections', {
 }));
 
 // ============================================
-// User-Connection Access Table
+// Data Access Policies (named, reusable bundles)
+// A policy groups one or more pattern rules and is attached to roles (M:N).
+// Connection scope is PER-RULE: each rule may target a specific connection, or
+// null = applies to all connections.
 // ============================================
 
-export const userConnections = pgTable('rbac_user_connections', {
+export const dataAccessPolicies = pgTable('rbac_data_access_policies', {
   id: text('id').primaryKey(),
-  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  connectionId: text('connection_id').notNull().references(() => clickhouseConnections.id, { onDelete: 'cascade' }),
-  canUse: boolean('can_use').notNull().default(true),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => ({
-  userConnIdx: uniqueIndex('user_conn_user_conn_idx').on(table.userId, table.connectionId),
-}));
-
-// ============================================
-// Data Access Rules Table
-// Defines which databases/tables a role OR user can access
-// Either roleId OR userId must be set (not both)
-// ============================================
-
-export const dataAccessRules = pgTable('rbac_data_access_rules', {
-  id: text('id').primaryKey(),
-  // Either roleId or userId should be set, not both
-  roleId: text('role_id').references(() => roles.id, { onDelete: 'cascade' }),
-  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
-  connectionId: text('connection_id').references(() => clickhouseConnections.id, { onDelete: 'cascade' }),
-  // null connectionId means rule applies to all connections
-
-  // Database pattern: exact name, wildcard (*), or regex pattern
-  databasePattern: varchar('database_pattern', { length: 255 }).notNull().default('*'),
-
-  // Table pattern: exact name, wildcard (*), or regex pattern
-  tablePattern: varchar('table_pattern', { length: 255 }).notNull().default('*'),
-
-  // Access type: 'read' (SELECT), 'write' (INSERT/UPDATE), 'admin' (DDL)
-  accessType: varchar('access_type', { length: 20 }).notNull().default('read'),
-
-  // If false, this is a deny rule (takes precedence over allow rules)
-  isAllowed: boolean('is_allowed').notNull().default(true),
-
-  // Priority: higher priority rules are evaluated first
-  priority: integer('priority').notNull().default(0),
-
+  name: varchar('name', { length: 255 }).notNull().unique(),
+  description: text('description'),
+  // System policies (e.g. guest system-tables) cannot be deleted.
+  isSystem: boolean('is_system').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
-  description: text('description'),
 }, (table) => ({
-  roleIdx: index('data_access_role_idx').on(table.roleId),
-  userIdx: index('data_access_user_idx').on(table.userId),
-  connIdx: index('data_access_conn_idx').on(table.connectionId),
-  patternIdx: index('data_access_pattern_idx').on(table.databasePattern, table.tablePattern),
-  roleConnIdx: index('data_access_role_conn_idx').on(table.roleId, table.connectionId),
-  userConnIdx: index('data_access_user_conn_idx').on(table.userId, table.connectionId),
+  nameIdx: uniqueIndex('data_access_policies_name_idx').on(table.name),
+}));
+
+// Pattern entries inside a policy. connectionId scopes the rule to one connection;
+// null = applies to all connections.
+export const dataAccessPolicyRules = pgTable('rbac_data_access_policy_rules', {
+  id: text('id').primaryKey(),
+  policyId: text('policy_id').notNull().references(() => dataAccessPolicies.id, { onDelete: 'cascade' }),
+  connectionId: text('connection_id').references(() => clickhouseConnections.id, { onDelete: 'cascade' }),
+  databasePattern: varchar('database_pattern', { length: 255 }).notNull().default('*'),
+  tablePattern: varchar('table_pattern', { length: 255 }).notNull().default('*'),
+  isAllowed: boolean('is_allowed').notNull().default(true),
+  priority: integer('priority').notNull().default(0),
+  description: text('description'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  policyIdx: index('data_access_policy_rules_policy_idx').on(table.policyId),
+  connIdx: index('data_access_policy_rules_conn_idx').on(table.connectionId),
+  patternIdx: index('data_access_policy_rules_pattern_idx').on(table.databasePattern, table.tablePattern),
+}));
+
+// M:N link role <-> policy
+export const roleDataAccessPolicies = pgTable('rbac_role_data_access_policies', {
+  id: text('id').primaryKey(),
+  roleId: text('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  policyId: text('policy_id').notNull().references(() => dataAccessPolicies.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  rolePolicyIdx: uniqueIndex('role_data_access_role_policy_idx').on(table.roleId, table.policyId),
+  roleIdx: index('role_data_access_role_idx').on(table.roleId),
+  policyIdx: index('role_data_access_policy_idx').on(table.policyId),
 }));
 
 // ============================================
@@ -522,8 +517,12 @@ export type Session = typeof sessions.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type ClickHouseConnection = typeof clickhouseConnections.$inferSelect;
-export type DataAccessRule = typeof dataAccessRules.$inferSelect;
-export type NewDataAccessRule = typeof dataAccessRules.$inferInsert;
+export type DataAccessPolicy = typeof dataAccessPolicies.$inferSelect;
+export type NewDataAccessPolicy = typeof dataAccessPolicies.$inferInsert;
+export type DataAccessPolicyRule = typeof dataAccessPolicyRules.$inferSelect;
+export type NewDataAccessPolicyRule = typeof dataAccessPolicyRules.$inferInsert;
+export type RoleDataAccessPolicy = typeof roleDataAccessPolicies.$inferSelect;
+export type NewRoleDataAccessPolicy = typeof roleDataAccessPolicies.$inferInsert;
 export type ClickHouseUserMetadata = typeof clickhouseUsersMetadata.$inferSelect;
 export type NewClickHouseUserMetadata = typeof clickhouseUsersMetadata.$inferInsert;
 export type SavedQuery = typeof savedQueries.$inferSelect;

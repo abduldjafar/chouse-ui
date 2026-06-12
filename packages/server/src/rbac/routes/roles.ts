@@ -40,6 +40,8 @@ const CreateRoleSchema = z.object({
   displayName: z.string().min(2).max(100),
   description: z.string().max(500).optional(),
   permissionIds: z.array(z.string()).min(1, 'At least one permission is required'),
+  // Custom roles are the primary way to grant data access — at least one policy is required.
+  dataAccessPolicyIds: z.array(z.string().uuid()).min(1, 'At least one data access policy is required'),
   isDefault: z.boolean().optional(),
 });
 
@@ -47,6 +49,9 @@ const UpdateRoleSchema = z.object({
   displayName: z.string().min(2).max(100).optional(),
   description: z.string().max(500).optional().nullable(),
   permissionIds: z.array(z.string()).optional(),
+  // No min here: system roles may carry zero policies. The ">=1 for custom roles"
+  // rule is enforced on the client; create always requires at least one.
+  dataAccessPolicyIds: z.array(z.string().uuid()).optional(),
   isDefault: z.boolean().optional(),
 });
 
