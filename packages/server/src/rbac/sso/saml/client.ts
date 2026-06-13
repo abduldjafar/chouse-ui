@@ -281,3 +281,37 @@ export function extractSamlIssuer(decodedXml: string): string | undefined {
   const issuer = node?.textContent?.trim() ?? "";
   return issuer || undefined;
 }
+
+/**
+ * Non-sensitive envelope fields of a decoded SAMLResponse for DEBUG-LEVEL
+ * troubleshooting — the values that cause most validation failures
+ * (audience/destination/InResponseTo/clock mismatches). Deliberately EXCLUDES
+ * PII: no NameID, no AttributeStatement, no signature. The user-facing
+ * attribute/claim set is logged separately on the success path by
+ * provisionSsoUser. Namespace-prefix-agnostic (selects by local-name()).
+ */
+export function summarizeSamlResponse(
+  decodedXml: string,
+): { issuer?: string; destination?: string; inResponseTo?: string; audience?: string; notBefore?: string; notOnOrAfter?: string } {
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(decodedXml, "text/xml");
+  } catch {
+    return {};
+  }
+  const val = (expr: string): string | undefined => {
+    const n = xpath.select1(expr, doc as never) as
+      | { value?: string | null; nodeValue?: string | null; textContent?: string | null }
+      | undefined;
+    const v = (n && (n.value ?? n.nodeValue ?? n.textContent)) ?? "";
+    return v.trim() || undefined;
+  };
+  return {
+    issuer: extractSamlIssuer(decodedXml),
+    destination: val("(//*[local-name()='Response'])[1]/@Destination"),
+    inResponseTo: val("(//*[local-name()='Response'])[1]/@InResponseTo"),
+    audience: val("(//*[local-name()='Audience'])[1]"),
+    notBefore: val("(//*[local-name()='Conditions'])[1]/@NotBefore"),
+    notOnOrAfter: val("(//*[local-name()='Conditions'])[1]/@NotOnOrAfter"),
+  };
+}

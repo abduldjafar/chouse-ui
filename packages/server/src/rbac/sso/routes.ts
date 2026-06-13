@@ -8,7 +8,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { getSsoConfig } from "./config";
 import { buildAuthorizationRedirect, exchangeCodeForIdentity } from "./client";
-import { buildSamlAuthnRequest, validateSamlResponse, resolveSamlProviderByIssuer, extractSamlIssuer } from "./saml/client";
+import { buildSamlAuthnRequest, validateSamlResponse, resolveSamlProviderByIssuer, extractSamlIssuer, summarizeSamlResponse } from "./saml/client";
 import { stashTokens, claimTokens, markAssertionSeen } from "./saml/handoff";
 import { provisionSsoUser } from "./service";
 import { describeSsoError } from "./errors";
@@ -344,15 +344,14 @@ export const samlAcsHandler = async (c: Context): Promise<Response> => {
     // that won't verify.
     const decoded = Buffer.from(SAMLResponse, "base64").toString("utf8");
 
-    // Troubleshooting aid (mirrors the OIDC full-claims debug log): the COMPLETE
-    // decoded SAMLResponse the IdP returned — Issuer, Destination, Conditions/
-    // Audience, NotBefore/NotOnOrAfter, InResponseTo, NameID, attributes — so a
-    // validation failure (audience/destination/InResponseTo mismatch) is
-    // diagnosable. Off unless LOG_LEVEL=debug. WARNING: contains PII; never raise
-    // above debug. The signature it includes is public material, not a secret.
+    // Troubleshooting aid: the non-sensitive envelope fields that cause most
+    // validation failures (audience/destination/InResponseTo/clock). Off unless
+    // LOG_LEVEL=debug. Deliberately NOT the raw XML — no PII (NameID/attributes)
+    // and no signature here; the validated claim set is logged separately on the
+    // success path by provisionSsoUser.
     requestLogger(c.get("requestId")).debug(
-      { module: "SSO", binding: "saml", relayStatePresent: Boolean(RelayState), samlResponseXml: decoded },
-      "SAML response received (full, debug only)"
+      { module: "SSO", binding: "saml", relayStatePresent: Boolean(RelayState), ...summarizeSamlResponse(decoded) },
+      "SAML response received (debug only)"
     );
 
     const issuer = extractSamlIssuer(decoded);

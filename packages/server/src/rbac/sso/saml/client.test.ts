@@ -5,6 +5,7 @@ import {
   buildSamlAuthnRequest,
   resolveSamlProviderByIssuer,
   extractSamlIssuer,
+  summarizeSamlResponse,
   resetSamlRequestCache,
   seedSamlRequestId,
   type SamlProviderConfig,
@@ -231,5 +232,26 @@ describe("extractSamlIssuer", () => {
 
   it("returns undefined when no Issuer element is present", () => {
     expect(extractSamlIssuer(`<samlp:Response xmlns:samlp="${SAMLP}"><samlp:Status/></samlp:Response>`)).toBeUndefined();
+  });
+});
+
+describe("summarizeSamlResponse", () => {
+  const SAMLP = "urn:oasis:names:tc:SAML:2.0:protocol";
+  const SAML = "urn:oasis:names:tc:SAML:2.0:assertion";
+  const xml = `<saml2p:Response xmlns:saml2p="${SAMLP}" xmlns:saml2="${SAML}" Destination="https://app/acs" InResponseTo="_req1"><saml2:Issuer>https://idp/entity</saml2:Issuer><saml2:Assertion><saml2:Subject><saml2:NameID>secret@user.test</saml2:NameID></saml2:Subject><saml2:Conditions NotBefore="2030-01-01T00:00:00Z" NotOnOrAfter="2030-01-01T00:05:00Z"><saml2:AudienceRestriction><saml2:Audience>https://app/sp</saml2:Audience></saml2:AudienceRestriction></saml2:Conditions><saml2:AttributeStatement><saml2:Attribute Name="email"><saml2:AttributeValue>secret@user.test</saml2:AttributeValue></saml2:Attribute></saml2:AttributeStatement></saml2:Assertion></saml2p:Response>`;
+
+  it("extracts the non-sensitive envelope fields", () => {
+    expect(summarizeSamlResponse(xml)).toEqual({
+      issuer: "https://idp/entity",
+      destination: "https://app/acs",
+      inResponseTo: "_req1",
+      audience: "https://app/sp",
+      notBefore: "2030-01-01T00:00:00Z",
+      notOnOrAfter: "2030-01-01T00:05:00Z",
+    });
+  });
+
+  it("never includes PII (NameID / attribute values)", () => {
+    expect(JSON.stringify(summarizeSamlResponse(xml))).not.toContain("secret@user.test");
   });
 });
