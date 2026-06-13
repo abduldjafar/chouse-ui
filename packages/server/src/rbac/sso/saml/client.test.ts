@@ -216,17 +216,20 @@ describe("resolveSamlProviderByIssuer", () => {
 });
 
 describe("extractSamlIssuer", () => {
+  // Real IdPs always declare the SAML namespaces; cases mirror that (well-formed XML).
+  const SAMLP = "urn:oasis:names:tc:SAML:2.0:protocol";
+  const SAML = "urn:oasis:names:tc:SAML:2.0:assertion";
   const cases: Array<[string, string]> = [
-    ["saml: prefix", `<samlp:Response><saml:Issuer>https://idp/entity</saml:Issuer></samlp:Response>`],
-    ["saml2: prefix (Okta)", `<saml2p:Response><saml2:Issuer Format="urn:oasis:names:tc:SAML:2.0:nameid-format:entity" xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion">https://idp/entity</saml2:Issuer></saml2p:Response>`],
-    ["no prefix (default ns)", `<Response><Issuer>https://idp/entity</Issuer></Response>`],
-    ["with surrounding whitespace", `<saml2:Issuer>\n  https://idp/entity\n</saml2:Issuer>`],
+    ["saml: prefix", `<samlp:Response xmlns:samlp="${SAMLP}" xmlns:saml="${SAML}"><saml:Issuer>https://idp/entity</saml:Issuer></samlp:Response>`],
+    ["saml2: prefix (Okta)", `<saml2p:Response xmlns:saml2p="${SAMLP}" xmlns:saml2="${SAML}"><saml2:Issuer Format="urn:oasis:names:tc:SAML:2.0:nameid-format:entity">https://idp/entity</saml2:Issuer></saml2p:Response>`],
+    ["no prefix (default ns)", `<Response xmlns="${SAMLP}"><Issuer xmlns="${SAML}">https://idp/entity</Issuer></Response>`],
+    ["surrounding whitespace", `<saml2:Issuer xmlns:saml2="${SAML}">\n  https://idp/entity\n</saml2:Issuer>`],
   ];
   it.each(cases)("extracts the issuer with %s", (_label, xml) => {
     expect(extractSamlIssuer(xml)).toBe("https://idp/entity");
   });
 
   it("returns undefined when no Issuer element is present", () => {
-    expect(extractSamlIssuer(`<samlp:Response><Status/></samlp:Response>`)).toBeUndefined();
+    expect(extractSamlIssuer(`<samlp:Response xmlns:samlp="${SAMLP}"><samlp:Status/></samlp:Response>`)).toBeUndefined();
   });
 });
