@@ -41,6 +41,16 @@ export async function provisionSsoUser(
   const db = getDatabase() as AnyDb;
   const schema = getSchema();
 
+  // Troubleshooting aid: the FULL decoded token the IdP returned — OIDC ID-token
+  // claims, or the OAuth2 userinfo response. Off unless LOG_LEVEL=debug. WARNING:
+  // this includes PII (email, name, groups, …); enable only while diagnosing, and
+  // never raise it to info/warn. It is the decoded claim set, not the signed JWT
+  // or any access token.
+  logger.debug(
+    { module: 'SSO', provider: provider.id, subject: identity.subject, claims: identity.claims },
+    'IdP token claims (full, debug only)'
+  );
+
   let user: User | null = null;
 
   // 1. Existing identity link
