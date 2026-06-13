@@ -38,20 +38,51 @@ function envProvidesSsoSettings(): boolean {
 
 const ProviderBody = z.object({
   id: z.string().regex(SLUG),
-  type: z.enum(["oidc", "oauth2"]),
+  type: z.enum(["oidc", "oauth2", "saml"]),
   displayName: z.string().min(1),
   issuer: z.string().url().optional(),
   authorizationEndpoint: z.string().url().optional(),
   tokenEndpoint: z.string().url().optional(),
   userinfoEndpoint: z.string().url().optional(),
-  clientId: z.string().min(1),
-  clientSecret: z.string().min(1),
-  scopes: z.string().min(1),
+  clientId: z.string().min(1).optional(),
+  clientSecret: z.string().min(1).optional(),
+  scopes: z.string().min(1).optional(),
   claimMapping: z.string().optional(),
   roleMappingClaim: z.string().optional(),
   roleMapping: z.string().optional(),
   authParams: z.string().optional(),
+  samlIdpEntityId: z.string().optional(),
+  samlIdpSsoUrl: z.string().url().optional(),
+  samlIdpCertificate: z.string().optional(),
+  samlSpEntityId: z.string().optional(),
+  samlNameIdFormat: z.string().optional(),
+  samlAllowIdpInitiated: z.boolean().optional(),
   enabled: z.boolean().optional(),
+});
+
+/**
+ * POST body: enforce per-type required fields. PATCH stays on
+ * `ProviderBody.partial()` so partial updates aren't subjected to these checks.
+ * OIDC/OAuth2 keep their original requiredness (clientId/clientSecret/scopes);
+ * SAML requires its IdP/SP identifiers instead.
+ */
+const ProviderCreateBody = ProviderBody.superRefine((data, ctx) => {
+  const requireField = (field: keyof typeof data, message: string) => {
+    const value = data[field];
+    if (value === undefined || value === null || value === "") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
+    }
+  };
+  if (data.type === "saml") {
+    requireField("samlIdpEntityId", "samlIdpEntityId is required for SAML providers");
+    requireField("samlIdpSsoUrl", "samlIdpSsoUrl is required for SAML providers");
+    requireField("samlIdpCertificate", "samlIdpCertificate is required for SAML providers");
+    requireField("samlSpEntityId", "samlSpEntityId is required for SAML providers");
+  } else {
+    requireField("clientId", "clientId is required");
+    requireField("clientSecret", "clientSecret is required");
+    requireField("scopes", "scopes is required");
+  }
 });
 
 const SettingsBody = z.object({
@@ -154,7 +185,7 @@ ssoAdminRoutes.get("/providers", requirePermission(PERMISSIONS.SSO_VIEW), async 
 ssoAdminRoutes.post(
   "/providers",
   requirePermission(PERMISSIONS.SSO_EDIT),
-  zValidator("json", ProviderBody),
+  zValidator("json", ProviderCreateBody),
   async (c) => {
     const input = c.req.valid("json");
     const user = getRbacUser(c);
@@ -238,6 +269,19 @@ ssoAdminRoutes.delete("/providers/:id", requirePermission(PERMISSIONS.SSO_DELETE
     data: { message: "SSO provider deleted", unlinkedUserCount: userIds.length },
   });
 });
+
+ssoAdminRoutes.post(
+  "/providers/parse-metadata",
+  requirePermission(PERMISSIONS.SSO_EDIT),
+  zValidator("json", z.object({ url: z.string().url().optional(), xml: z.string().optional() })),
+  async (c) => {
+    const { url, xml } = c.req.valid("json");
+    const { parseIdpMetadataXml, fetchIdpMetadata } = await import("../sso/saml/metadata");
+    if (url) return c.json({ success: true, data: await fetchIdpMetadata(url) });
+    if (xml) return c.json({ success: true, data: parseIdpMetadataXml(xml) });
+    throw AppError.badRequest("Provide either url or xml");
+  }
+);
 
 ssoAdminRoutes.post(
   "/providers/test",

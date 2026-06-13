@@ -1637,7 +1637,7 @@ export interface SsoAdminSettings {
 
 export interface SsoAdminProvider {
   id: string;
-  type: 'oidc' | 'oauth2';
+  type: 'oidc' | 'oauth2' | 'saml';
   displayName: string;
   source: 'config' | 'database';
   enabled: boolean;
@@ -1652,6 +1652,12 @@ export interface SsoAdminProvider {
   roleMappingClaim?: string | null;
   roleMapping?: string | null;
   authParams?: string | null;
+  samlIdpEntityId?: string | null;
+  samlIdpSsoUrl?: string | null;
+  samlIdpCertificate?: string | null;
+  samlSpEntityId?: string | null;
+  samlNameIdFormat?: string | null;
+  samlAllowIdpInitiated?: boolean | null;
   linkedUserCount?: number;
 }
 
@@ -1692,6 +1698,10 @@ export const rbacSsoAdminApi = {
 
   async testProvider(input: Record<string, unknown>): Promise<SsoTestResult> {
     return rbacFetch('/sso-admin/providers/test', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  async parseSamlMetadata(input: { url?: string; xml?: string }): Promise<{ idpEntityId: string; idpSsoUrl: string; idpCertificate: string }> {
+    return rbacFetch('/sso-admin/providers/parse-metadata', { method: 'POST', body: JSON.stringify(input) });
   },
 };
 

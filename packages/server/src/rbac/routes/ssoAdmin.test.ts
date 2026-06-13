@@ -333,6 +333,60 @@ describe("RBAC SSO Admin Routes", () => {
       const arg = mockCreateDbProvider.mock.calls.at(-1)![0] as unknown as { authParams?: string };
       expect(arg.authParams).toBe("hd:acme.com,prompt:consent");
     });
+
+    const validSamlBody = {
+      id: "saml-idp",
+      type: "saml",
+      displayName: "SAML IdP",
+      samlIdpEntityId: "https://idp.example.com/entity",
+      samlIdpSsoUrl: "https://idp.example.com/sso",
+      samlIdpCertificate: "-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----",
+      samlSpEntityId: "https://app.example.com/sp",
+    };
+
+    it("creates a SAML provider, passing the SAML fields to the store", async () => {
+      const res = await app.request("/sso-admin/providers", {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify(validSamlBody),
+      });
+      expect(res.status).toBe(201);
+      expect(mockCreateDbProvider).toHaveBeenCalled();
+      const arg = mockCreateDbProvider.mock.calls.at(-1)![0] as unknown as {
+        samlIdpEntityId?: string;
+        type?: string;
+      };
+      expect(arg.type).toBe("saml");
+      expect(arg.samlIdpEntityId).toBe("https://idp.example.com/entity");
+    });
+
+    it("rejects a SAML provider missing samlIdpEntityId (400)", async () => {
+      const { samlIdpEntityId: _omit, ...incomplete } = validSamlBody;
+      const res = await app.request("/sso-admin/providers", {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify(incomplete),
+      });
+      expect(res.status).toBe(400);
+      expect(mockCreateDbProvider).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST /providers/parse-metadata", () => {
+    const METADATA_XML = `<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="https://idp.test/entity"><IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol"><KeyDescriptor use="signing"><KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><X509Data><X509Certificate>MIIBconly</X509Certificate></X509Data></KeyInfo></KeyDescriptor><SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="https://idp.test/sso"/></IDPSSODescriptor></EntityDescriptor>`;
+
+    it("parses pasted IdP metadata XML into endpoints and certificate", async () => {
+      const res = await app.request("/sso-admin/providers/parse-metadata", {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ xml: METADATA_XML }),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.data.idpEntityId).toBe("https://idp.test/entity");
+      expect(body.data.idpSsoUrl).toBe("https://idp.test/sso");
+      expect(body.data.idpCertificate).toContain("BEGIN CERTIFICATE");
+    });
   });
 
   describe("PATCH /providers/:id", () => {

@@ -112,7 +112,7 @@ const HELP_CLASS = "text-[11px] text-paper-faint";
 const SLUG_RE = /^[a-z0-9_-]+$/;
 const SECRET_PLACEHOLDER = "•••• set";
 
-type ProviderType = "oidc" | "oauth2";
+type ProviderType = "oidc" | "oauth2" | "saml";
 
 /** True only for a syntactically valid absolute http(s) URL. */
 function isValidUrl(value: string): boolean {
