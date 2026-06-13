@@ -273,13 +273,11 @@ ssoAdminRoutes.delete("/providers/:id", requirePermission(PERMISSIONS.SSO_DELETE
 ssoAdminRoutes.post(
   "/providers/parse-metadata",
   requirePermission(PERMISSIONS.SSO_EDIT),
-  zValidator("json", z.object({ url: z.string().url().optional(), xml: z.string().optional() })),
+  zValidator("json", z.object({ xml: z.string().min(1) })),
   async (c) => {
-    const { url, xml } = c.req.valid("json");
-    const { parseIdpMetadataXml, fetchIdpMetadata } = await import("../sso/saml/metadata");
-    if (url) return c.json({ success: true, data: await fetchIdpMetadata(url) });
-    if (xml) return c.json({ success: true, data: parseIdpMetadataXml(xml) });
-    throw AppError.badRequest("Provide either url or xml");
+    const { xml } = c.req.valid("json");
+    const { parseIdpMetadataXml } = await import("../sso/saml/metadata");
+    return c.json({ success: true, data: parseIdpMetadataXml(xml) });
   }
 );
 

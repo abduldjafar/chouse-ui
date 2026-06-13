@@ -1700,7 +1700,7 @@ export const rbacSsoAdminApi = {
     return rbacFetch('/sso-admin/providers/test', { method: 'POST', body: JSON.stringify(input) });
   },
 
-  async parseSamlMetadata(input: { url?: string; xml?: string }): Promise<{ idpEntityId: string; idpSsoUrl: string; idpCertificate: string }> {
+  async parseSamlMetadata(input: { xml: string }): Promise<{ idpEntityId: string; idpSsoUrl: string; idpCertificate: string }> {
     return rbacFetch('/sso-admin/providers/parse-metadata', { method: 'POST', body: JSON.stringify(input) });
   },
 };

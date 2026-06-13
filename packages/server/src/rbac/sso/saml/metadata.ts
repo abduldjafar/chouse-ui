@@ -35,11 +35,3 @@ export function parseIdpMetadataXml(xml: string): ParsedIdpMetadata {
   const idpCertificate = `-----BEGIN CERTIFICATE-----\n${body}\n-----END CERTIFICATE-----`;
   return { idpEntityId: entity, idpSsoUrl: sso, idpCertificate };
 }
-
-export async function fetchIdpMetadata(url: string): Promise<ParsedIdpMetadata> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!res.ok) {
-    throw new Error(`[SAML] Metadata fetch failed: HTTP ${res.status}`);
-  }
-  return parseIdpMetadataXml(await res.text());
-}
