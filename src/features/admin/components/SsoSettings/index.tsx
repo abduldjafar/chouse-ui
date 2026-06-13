@@ -684,7 +684,25 @@ interface ProviderDraft {
   roleMappingClaim: string;
   roleMappingRows: RoleMappingRow[];
   authParamsRows: KeyValueRow[];
+  // SAML 2.0
+  samlIdpEntityId: string;
+  samlIdpSsoUrl: string;
+  samlIdpCertificate: string;
+  samlSpEntityId: string;
+  samlNameIdFormat: string;
+  samlAllowIdpInitiated: boolean;
 }
+
+// Common NameID formats offered in the SAML config step.
+const SAML_NAMEID_FORMATS = [
+  ["(default)", ""],
+  ["emailAddress", "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress"],
+  ["persistent", "urn:oasis:names:tc:SAML:2.0:nameid-format:persistent"],
+  ["transient", "urn:oasis:names:tc:SAML:2.0:nameid-format:transient"],
+  ["unspecified", "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified"],
+] as const;
+// Sentinel for the empty/"(default)" option — the Select primitive can't hold "".
+const SAML_NAMEID_DEFAULT = "__default__";
 
 function emptyDraft(): ProviderDraft {
   return {
@@ -703,6 +721,12 @@ function emptyDraft(): ProviderDraft {
     roleMappingClaim: "",
     roleMappingRows: [],
     authParamsRows: [],
+    samlIdpEntityId: "",
+    samlIdpSsoUrl: "",
+    samlIdpCertificate: "",
+    samlSpEntityId: "",
+    samlNameIdFormat: "",
+    samlAllowIdpInitiated: false,
   };
 }
 
@@ -723,6 +747,12 @@ function draftFromProvider(p: SsoAdminProvider): ProviderDraft {
     roleMappingClaim: p.roleMappingClaim ?? "",
     roleMappingRows: parseRoleMapping(p.roleMapping),
     authParamsRows: parseKeyValues(p.authParams),
+    samlIdpEntityId: p.samlIdpEntityId ?? "",
+    samlIdpSsoUrl: p.samlIdpSsoUrl ?? "",
+    samlIdpCertificate: p.samlIdpCertificate ?? "",
+    samlSpEntityId: p.samlSpEntityId ?? "",
+    samlNameIdFormat: p.samlNameIdFormat ?? "",
+    samlAllowIdpInitiated: p.samlAllowIdpInitiated ?? false,
   };
 }
 
@@ -733,6 +763,7 @@ interface ProviderWizardProps {
 }
 
 const STEP_LABELS = ["Identity", "Endpoints", "Test & save"];
+const SAML_STEP_LABELS = ["Identity", "IdP config", "Review & save"];
 
 function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
   const queryClient = useQueryClient();
@@ -741,6 +772,12 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
     queryKey: ["rbac-roles"],
     queryFn: () => rbacRolesApi.list(),
   });
+  // Read the same settings the panel uses so SAML can show the SP ACS URL.
+  const { data: settings } = useQuery({
+    queryKey: ["sso-settings"],
+    queryFn: () => rbacSsoAdminApi.getSettings(),
+  });
+  const baseUrl = (settings?.baseUrl ?? "").trim().replace(/\/$/, "");
 
   const [step, setStep] = useState(1);
   const [draft, setDraft] = useState<ProviderDraft>(emptyDraft());
@@ -748,6 +785,15 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
   const [isTesting, setIsTesting] = useState(false);
   const [saveAnyway, setSaveAnyway] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // SAML metadata-paste box (local to the wizard, cleared on open).
+  const [samlMetadataXml, setSamlMetadataXml] = useState("");
+  const [parsingMetadata, setParsingMetadata] = useState(false);
+
+  const isSaml = draft.type === "saml";
+  // ACS URL the admin registers at their IdP (derived from the SSO base URL).
+  const acsUrl = baseUrl ? `${baseUrl}/auth/sso/saml/acs` : "";
+  // SP entityID falls back to the base URL when left blank.
+  const effectiveSpEntityId = draft.samlSpEntityId.trim() || baseUrl;
 
   // Reset state whenever the dialog opens or the target provider changes.
   useEffect(() => {
@@ -757,6 +803,7 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
     setStep(1);
     setTestResult(null);
     setSaveAnyway(false);
+    setSamlMetadataXml("");
     // Auto-expand Advanced when the provider already has overrides / params set.
     setAdvancedOpen(
       Boolean(
@@ -780,11 +827,12 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
   // On create the secret is required; on edit it may be left untouched.
   const secretOk = isEditing ? (editing?.hasSecret ?? false) || secretChanged : secretChanged;
 
-  const step1Valid =
-    SLUG_RE.test(draft.id) &&
-    draft.displayName.trim().length > 0 &&
-    draft.clientId.trim().length > 0 &&
-    secretOk;
+  const step1Valid = isSaml
+    ? SLUG_RE.test(draft.id) && draft.displayName.trim().length > 0
+    : SLUG_RE.test(draft.id) &&
+      draft.displayName.trim().length > 0 &&
+      draft.clientId.trim().length > 0 &&
+      secretOk;
 
   // An optional URL field is valid when empty or a well-formed URL.
   const optUrlOk = (v: string): boolean => v.trim() === "" || isValidUrl(v);
@@ -792,20 +840,46 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
   // saving mapping rows while "Claim to read" is empty (a silent footgun).
   const hasRoleMappingRows = draft.roleMappingRows.some((r) => r.value.trim() && r.role.trim());
   const roleMappingClaimMissing = hasRoleMappingRows && draft.roleMappingClaim.trim() === "";
-  const step2Valid =
-    draft.scopes.trim().length > 0 &&
-    !roleMappingClaimMissing &&
-    (draft.type === "oidc"
-      ? isValidUrl(draft.issuer) &&
-        optUrlOk(draft.authorizationEndpoint) &&
-        optUrlOk(draft.tokenEndpoint) &&
-        optUrlOk(draft.userinfoEndpoint)
-      : isValidUrl(draft.authorizationEndpoint) &&
-        isValidUrl(draft.tokenEndpoint) &&
-        isValidUrl(draft.userinfoEndpoint));
+  const step2Valid = isSaml
+    ? !roleMappingClaimMissing &&
+      draft.samlIdpEntityId.trim().length > 0 &&
+      isValidUrl(draft.samlIdpSsoUrl) &&
+      draft.samlIdpCertificate.trim().length > 0
+    : draft.scopes.trim().length > 0 &&
+      !roleMappingClaimMissing &&
+      (draft.type === "oidc"
+        ? isValidUrl(draft.issuer) &&
+          optUrlOk(draft.authorizationEndpoint) &&
+          optUrlOk(draft.tokenEndpoint) &&
+          optUrlOk(draft.userinfoEndpoint)
+        : isValidUrl(draft.authorizationEndpoint) &&
+          isValidUrl(draft.tokenEndpoint) &&
+          isValidUrl(draft.userinfoEndpoint));
 
   // Build the payload sent to create/update. Secret only included when typed.
   const buildPayload = (): Record<string, unknown> => {
+    // SAML has no client credentials / scopes / OAuth endpoints — send only the
+    // SAML fields plus the shared display/role-mapping ones.
+    if (isSaml) {
+      const payload: Record<string, unknown> = {
+        type: "saml",
+        displayName: draft.displayName.trim(),
+        enabled: draft.enabled,
+        samlIdpEntityId: draft.samlIdpEntityId.trim(),
+        samlIdpSsoUrl: draft.samlIdpSsoUrl.trim(),
+        samlIdpCertificate: draft.samlIdpCertificate.trim(),
+        samlSpEntityId: effectiveSpEntityId,
+        samlAllowIdpInitiated: draft.samlAllowIdpInitiated,
+      };
+      if (!isEditing) payload.id = draft.id.trim();
+      if (draft.samlNameIdFormat.trim()) payload.samlNameIdFormat = draft.samlNameIdFormat.trim();
+      if (draft.claimMapping.trim()) payload.claimMapping = draft.claimMapping.trim();
+      if (draft.roleMappingClaim.trim()) payload.roleMappingClaim = draft.roleMappingClaim.trim();
+      const samlRoleMapping = serializeRoleMapping(draft.roleMappingRows);
+      if (samlRoleMapping) payload.roleMapping = samlRoleMapping;
+      return payload;
+    }
+
     const payload: Record<string, unknown> = {
       type: draft.type,
       displayName: draft.displayName.trim(),
@@ -841,6 +915,27 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
   // to it (we pass the provider id below).
   const hasStoredSecret = isEditing && (editing?.hasSecret ?? false);
   const canTest = step2Valid && (secretChanged || hasStoredSecret);
+
+  const handleParseMetadata = async () => {
+    const xml = samlMetadataXml.trim();
+    if (!xml) return;
+    setParsingMetadata(true);
+    try {
+      const result = await rbacSsoAdminApi.parseSamlMetadata({ xml });
+      update({
+        samlIdpEntityId: result.idpEntityId,
+        samlIdpSsoUrl: result.idpSsoUrl,
+        samlIdpCertificate: result.idpCertificate,
+      });
+      toast.success("Metadata parsed — IdP fields filled in");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to parse metadata";
+      log.error("SAML metadata parse failed", error);
+      toast.error("Failed to parse metadata", { description: message });
+    } finally {
+      setParsingMetadata(false);
+    }
+  };
 
   const handleTest = async () => {
     setIsTesting(true);
@@ -899,7 +994,9 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
   });
 
   const testPassed = testResult?.ok === true;
-  const canSave = (testPassed || saveAnyway) && !saveMutation.isPending;
+  // SAML has no live round-trip test, so saving is gated only on valid input.
+  const canSave =
+    (isSaml ? step2Valid : testPassed || saveAnyway) && !saveMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -911,19 +1008,28 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
           </DialogTitle>
           <DialogDescription className="text-paper-muted">
             {step === 1 && "Step 1 of 3 — type & identity."}
-            {step === 2 && "Step 2 of 3 — endpoints & claim mapping."}
-            {step === 3 && "Step 3 of 3 — test the configuration, then save."}
+            {step === 2 &&
+              (isSaml
+                ? "Step 2 of 3 — IdP metadata & attribute mapping."
+                : "Step 2 of 3 — endpoints & claim mapping.")}
+            {step === 3 &&
+              (isSaml
+                ? "Step 3 of 3 — review the configuration, then save."
+                : "Step 3 of 3 — test the configuration, then save.")}
           </DialogDescription>
         </DialogHeader>
 
         {/* Stepper */}
         <div className="flex items-center gap-2 px-1 pb-2">
-          {STEP_LABELS.map((label, i) => {
+          {(isSaml ? SAML_STEP_LABELS : STEP_LABELS).map((label, i) => {
             const n = i + 1;
             const last = STEP_LABELS.length;
-            // Final step turns green once the test passes, red if it failed.
-            const isComplete = step > n || (n === last && testPassed);
-            const isFailed = n === last && step === last && testResult != null && !testResult.ok;
+            // Final step turns green once the test passes (or, for SAML which has
+            // no live test, once you reach it with valid input), red if it failed.
+            const isComplete =
+              step > n || (n === last && (testPassed || (isSaml && step === last && step2Valid)));
+            const isFailed =
+              !isSaml && n === last && step === last && testResult != null && !testResult.ok;
             return (
               <div key={label} className="flex items-center gap-2">
                 <span
@@ -971,6 +1077,7 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                     <SelectContent>
                       <SelectItem value="oidc">OIDC</SelectItem>
                       <SelectItem value="oauth2">OAuth2</SelectItem>
+                      <SelectItem value="saml">SAML 2.0</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1001,33 +1108,81 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label className={LABEL_CLASS}>Client ID</Label>
-                <Input
-                  value={draft.clientId}
-                  onChange={(e) => update({ clientId: e.target.value })}
-                  placeholder="0oa1b2c3..."
-                  className={INPUT_CLASS}
-                />
-              </div>
+              {!isSaml && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className={LABEL_CLASS}>Client ID</Label>
+                    <Input
+                      value={draft.clientId}
+                      onChange={(e) => update({ clientId: e.target.value })}
+                      placeholder="0oa1b2c3..."
+                      className={INPUT_CLASS}
+                    />
+                  </div>
 
-              <div className="space-y-1.5">
-                <Label className={cn(LABEL_CLASS, "flex items-center gap-1.5")}>
-                  Client secret
-                  {isEditing && editing?.hasSecret && (
-                    <span className="normal-case tracking-normal text-paper-faint">
-                      (leave empty to keep)
-                    </span>
-                  )}
-                </Label>
-                <Input
-                  type="password"
-                  value={draft.clientSecret}
-                  onChange={(e) => update({ clientSecret: e.target.value })}
-                  placeholder={isEditing && editing?.hasSecret ? SECRET_PLACEHOLDER : "••••••••"}
-                  className={INPUT_CLASS}
-                />
-              </div>
+                  <div className="space-y-1.5">
+                    <Label className={cn(LABEL_CLASS, "flex items-center gap-1.5")}>
+                      Client secret
+                      {isEditing && editing?.hasSecret && (
+                        <span className="normal-case tracking-normal text-paper-faint">
+                          (leave empty to keep)
+                        </span>
+                      )}
+                    </Label>
+                    <Input
+                      type="password"
+                      value={draft.clientSecret}
+                      onChange={(e) => update({ clientSecret: e.target.value })}
+                      placeholder={isEditing && editing?.hasSecret ? SECRET_PLACEHOLDER : "••••••••"}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                </>
+              )}
+
+              {isSaml && (
+                <>
+                  <div className="space-y-1.5">
+                    <Label className={LABEL_CLASS}>SP entityID</Label>
+                    <Input
+                      value={draft.samlSpEntityId}
+                      onChange={(e) => update({ samlSpEntityId: e.target.value })}
+                      placeholder={baseUrl || "https://chouse.example.com"}
+                      className={INPUT_CLASS}
+                    />
+                    <p className={HELP_CLASS}>
+                      Identifier this service presents to your IdP. Defaults to the SSO base URL when
+                      left blank.
+                    </p>
+                  </div>
+
+                  {/* Read-only info the admin registers at the IdP. */}
+                  <div className="space-y-2 rounded-xs border border-ink-500 bg-ink-200 p-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">
+                      Register these at your IdP
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label className={LABEL_CLASS}>ACS URL (Assertion Consumer Service)</Label>
+                      {acsUrl ? (
+                        <code className="block break-all font-mono text-[11px] text-paper-muted">
+                          {acsUrl}
+                        </code>
+                      ) : (
+                        <p className="flex items-center gap-1.5 text-[11px] text-amber-300">
+                          <AlertCircle className="h-3 w-3 shrink-0" />
+                          Set the SSO base URL in Global settings to derive the ACS URL.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className={LABEL_CLASS}>SP entityID</Label>
+                      <code className="block break-all font-mono text-[11px] text-paper-muted">
+                        {effectiveSpEntityId || "—"}
+                      </code>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Enabled toggle */}
               <div className="flex items-center justify-between gap-3 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5">
@@ -1043,7 +1198,135 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
           {/* STEP 2 — Endpoints & mapping */}
           {step === 2 && (
             <div className="space-y-5">
-              {/* --- Endpoints --- */}
+              {/* --- SAML: IdP metadata + manual fields --- */}
+              {isSaml && (
+                <>
+                  <section className="space-y-3">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">
+                      Paste IdP metadata XML
+                    </p>
+                    <textarea
+                      value={samlMetadataXml}
+                      onChange={(e) => setSamlMetadataXml(e.target.value)}
+                      placeholder="<EntityDescriptor ...>…</EntityDescriptor>"
+                      rows={4}
+                      className={cn(
+                        INPUT_CLASS,
+                        "h-auto w-full resize-y px-2 py-1.5 leading-[1.5]",
+                      )}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleParseMetadata}
+                        disabled={!samlMetadataXml.trim() || parsingMetadata}
+                        className="h-8 gap-2 rounded-xs border-ink-500 bg-ink-200 px-3 font-mono text-[11px] uppercase tracking-[0.14em] text-paper hover:border-ink-700 hover:bg-ink-300 disabled:opacity-50"
+                      >
+                        {parsingMetadata ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        )}
+                        Parse metadata
+                      </Button>
+                      <span className={HELP_CLASS}>Fills the IdP fields below — you can still edit them.</span>
+                    </div>
+                  </section>
+
+                  <section className="space-y-3 border-t border-ink-500 pt-4">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">
+                      Identity provider
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label className={LABEL_CLASS}>IdP entityID</Label>
+                      <Input
+                        value={draft.samlIdpEntityId}
+                        onChange={(e) => update({ samlIdpEntityId: e.target.value })}
+                        placeholder="https://idp.example.com/metadata"
+                        className={INPUT_CLASS}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className={LABEL_CLASS}>IdP SSO URL</Label>
+                      <Input
+                        value={draft.samlIdpSsoUrl}
+                        onChange={(e) => update({ samlIdpSsoUrl: e.target.value })}
+                        placeholder="https://idp.example.com/sso/saml"
+                        className={cn(INPUT_CLASS, urlInvalid(draft.samlIdpSsoUrl) && "border-red-500/60")}
+                      />
+                      {urlInvalid(draft.samlIdpSsoUrl) && (
+                        <p className="text-[11px] text-red-300">Enter a valid URL (https://…).</p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className={LABEL_CLASS}>IdP certificate (PEM)</Label>
+                      <textarea
+                        value={draft.samlIdpCertificate}
+                        onChange={(e) => update({ samlIdpCertificate: e.target.value })}
+                        placeholder="-----BEGIN CERTIFICATE-----&#10;…&#10;-----END CERTIFICATE-----"
+                        rows={5}
+                        className={cn(
+                          INPUT_CLASS,
+                          "h-auto w-full resize-y px-2 py-1.5 leading-[1.5]",
+                        )}
+                      />
+                      <p className={HELP_CLASS}>X.509 signing certificate used to verify IdP assertions.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className={LABEL_CLASS}>NameID format</Label>
+                      <Select
+                        value={draft.samlNameIdFormat.trim() ? draft.samlNameIdFormat : SAML_NAMEID_DEFAULT}
+                        onValueChange={(v) =>
+                          update({ samlNameIdFormat: v === SAML_NAMEID_DEFAULT ? "" : v })
+                        }
+                      >
+                        <SelectTrigger className={INPUT_CLASS}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SAML_NAMEID_FORMATS.map(([label, value]) => (
+                            <SelectItem key={value || SAML_NAMEID_DEFAULT} value={value || SAML_NAMEID_DEFAULT}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5">
+                      <div className="flex flex-col gap-0.5">
+                        <Label className="text-[13px] font-medium text-paper">Allow IdP-initiated sign-in</Label>
+                        <span className={HELP_CLASS}>
+                          IdP-initiated flows are less secure (no SP-side request to match). Off by default.
+                        </span>
+                      </div>
+                      <Switch
+                        checked={draft.samlAllowIdpInitiated}
+                        onCheckedChange={(v) => update({ samlAllowIdpInitiated: v })}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="space-y-3 border-t border-ink-500 pt-4">
+                    <div className="space-y-1.5">
+                      <Label className={LABEL_CLASS}>Attribute mapping (optional)</Label>
+                      <Input
+                        value={draft.claimMapping}
+                        onChange={(e) => update({ claimMapping: e.target.value })}
+                        placeholder="email=email,name=displayName"
+                        className={INPUT_CLASS}
+                      />
+                      <p className={HELP_CLASS}>
+                        Map SAML attribute names to user fields (subject / email / username).
+                      </p>
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {/* --- Endpoints (OIDC / OAuth2 only) --- */}
+              {!isSaml && (
+              <>
               <section className="space-y-3">
                 <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim">
                   {draft.type === "oidc" ? "Issuer" : "Endpoints"}
@@ -1186,6 +1469,8 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                   </CollapsibleContent>
                 </Collapsible>
               </section>
+              </>
+              )}
 
               {/* --- Role mapping (optional, bounded block) --- */}
               <section className="space-y-3 rounded-xs border border-ink-500 bg-ink-200 p-3">
@@ -1194,11 +1479,13 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                     Role mapping (optional)
                   </p>
                   <p className={HELP_CLASS}>
-                    Assign local roles from a provider claim on every sign-in. Leave empty to use the default role.
+                    {isSaml
+                      ? "Assign local roles from a SAML attribute on every sign-in. Leave empty to use the default role."
+                      : "Assign local roles from a provider claim on every sign-in. Leave empty to use the default role."}
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className={LABEL_CLASS}>Claim to read</Label>
+                  <Label className={LABEL_CLASS}>{isSaml ? "Attribute to read" : "Claim to read"}</Label>
                   <Input
                     value={draft.roleMappingClaim}
                     onChange={(e) => update({ roleMappingClaim: e.target.value })}
@@ -1238,20 +1525,46 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                   <dd className="font-mono text-paper">{draft.type}</dd>
                   <dt className="text-paper-faint">name</dt>
                   <dd className="text-paper">{draft.displayName}</dd>
-                  {draft.type === "oidc" ? (
+                  {draft.type === "oidc" && (
                     <>
                       <dt className="text-paper-faint">issuer</dt>
                       <dd className="break-all font-mono text-paper-muted">{draft.issuer}</dd>
                     </>
-                  ) : (
+                  )}
+                  {draft.type === "oauth2" && (
                     <>
                       <dt className="text-paper-faint">token</dt>
                       <dd className="break-all font-mono text-paper-muted">{draft.tokenEndpoint}</dd>
                     </>
                   )}
+                  {isSaml && (
+                    <>
+                      <dt className="text-paper-faint">IdP entityID</dt>
+                      <dd className="break-all font-mono text-paper-muted">{draft.samlIdpEntityId}</dd>
+                      <dt className="text-paper-faint">IdP SSO URL</dt>
+                      <dd className="break-all font-mono text-paper-muted">{draft.samlIdpSsoUrl}</dd>
+                      <dt className="text-paper-faint">SP entityID</dt>
+                      <dd className="break-all font-mono text-paper-muted">{effectiveSpEntityId || "—"}</dd>
+                      <dt className="text-paper-faint">IdP-initiated</dt>
+                      <dd className="font-mono text-paper-muted">
+                        {draft.samlAllowIdpInitiated ? "allowed" : "off"}
+                      </dd>
+                    </>
+                  )}
                 </dl>
               </div>
 
+              {isSaml && (
+                <div className="flex items-start gap-2 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-paper-dim" />
+                  <p className="text-[12px] text-paper-muted">
+                    SAML has no live round-trip test. Make sure the ACS URL and SP entityID are
+                    registered at your IdP — full verification happens on the first sign-in.
+                  </p>
+                </div>
+              )}
+
+              {!isSaml && (
               <Button
                 type="button"
                 variant="outline"
@@ -1262,8 +1575,9 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                 {isTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                 Test configuration
               </Button>
+              )}
 
-              {!canTest && (
+              {!isSaml && !canTest && (
                 <p className="flex items-center gap-1.5 text-[11px] text-paper-faint">
                   <AlertCircle className="h-3 w-3" />
                   {!step2Valid
@@ -1312,7 +1626,7 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                 </div>
               )}
 
-              {!testPassed && (
+              {!isSaml && !testPassed && (
                 <label className="flex cursor-pointer items-center gap-2 rounded-xs border border-amber-900/60 bg-amber-950/40 px-3 py-2">
                   <Switch checked={saveAnyway} onCheckedChange={setSaveAnyway} />
                   <span className="text-[12px] text-amber-200">
@@ -1446,7 +1760,7 @@ function ProvidersPanel({ canEdit, canDelete }: { canEdit: boolean; canDelete: b
             <KeyRound className="mx-auto mb-3 h-7 w-7 text-paper-faint" aria-hidden />
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-paper-dim">No SSO providers</p>
             <p className="mt-2 text-[12px] text-paper-muted">
-              Add an OIDC or OAuth2 provider, or configure one via environment variables.
+              Add an OIDC, OAuth2, or SAML provider, or configure one via environment variables.
             </p>
           </div>
         ) : (
@@ -1677,7 +1991,7 @@ const SsoSettings: React.FC = () => {
           <span>Single sign-on</span>
         </span>
         <p className="text-[12px] text-paper-muted">
-          Global SSO settings and OIDC / OAuth2 providers. Providers from environment config are read-only.
+          Global SSO settings and OIDC / OAuth2 / SAML providers. Providers from environment config are read-only.
         </p>
       </div>
 
