@@ -298,6 +298,27 @@ describe("SSO DB Store", () => {
       expect(capturedSetArg.clientSecretEncrypted).toBeUndefined();
       expect(capturedSetArg.displayName).toBe("Renamed");
     });
+
+    it("persists SAML provider columns (no secret required)", async () => {
+      const created = await createDbProvider({
+        id: "okta-saml", type: "saml", displayName: "Okta SAML",
+        samlIdpEntityId: "https://idp/e", samlIdpSsoUrl: "https://idp/sso",
+        samlIdpCertificate: "PEM", samlSpEntityId: "https://app/sp",
+        samlNameIdFormat: "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+        samlAllowIdpInitiated: true,
+      });
+      seededSelectRows = [created];
+      const row = await getDbProvider("okta-saml");
+      expect(row?.type).toBe("saml");
+      expect(row?.samlIdpEntityId).toBe("https://idp/e");
+      expect(row?.samlSpEntityId).toBe("https://app/sp");
+      expect(row?.samlAllowIdpInitiated).toBe(true);
+      expect(row?.clientSecretEncrypted).toBeNull();
+
+      await updateDbProvider("okta-saml", { samlAllowIdpInitiated: false, displayName: "Renamed" });
+      expect(capturedSetArg.samlAllowIdpInitiated).toBe(false);
+      expect(capturedSetArg.displayName).toBe("Renamed");
+    });
   });
 
   // ----------------------------------------------------------------

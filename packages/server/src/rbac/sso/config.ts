@@ -222,25 +222,15 @@ export async function buildSsoConfig(
     if (providers.has(p.id)) continue; // env wins on conflict
     let candidate: Record<string, unknown>;
     if (p.type === 'saml') {
-      // Task 7 adds these saml columns to DbSsoProvider; cast defensively so
-      // this compiles standalone before the store schema is updated.
-      const sp = p as typeof p & {
-        samlIdpEntityId?: string | null;
-        samlIdpSsoUrl?: string | null;
-        samlIdpCertificate?: string | null;
-        samlSpEntityId?: string | null;
-        samlNameIdFormat?: string | null;
-        samlAllowIdpInitiated?: boolean | null;
-      };
       candidate = {
         type: 'saml',
         displayName: p.displayName,
-        samlIdpEntityId: sp.samlIdpEntityId ?? undefined,
-        samlIdpSsoUrl: sp.samlIdpSsoUrl ?? undefined,
-        samlIdpCertificate: sp.samlIdpCertificate ?? undefined,
-        samlSpEntityId: (sp.samlSpEntityId ?? '') || envCfg.baseUrl, // default SP entityID = base URL
-        samlNameIdFormat: sp.samlNameIdFormat ?? undefined,
-        samlAllowIdpInitiated: sp.samlAllowIdpInitiated ?? undefined,
+        samlIdpEntityId: p.samlIdpEntityId ?? undefined,
+        samlIdpSsoUrl: p.samlIdpSsoUrl ?? undefined,
+        samlIdpCertificate: p.samlIdpCertificate ?? undefined,
+        samlSpEntityId: (p.samlSpEntityId ?? '') || envCfg.baseUrl, // default SP entityID = base URL
+        samlNameIdFormat: p.samlNameIdFormat ?? undefined,
+        samlAllowIdpInitiated: p.samlAllowIdpInitiated ?? undefined,
         claimMapping: p.claimMapping ? parsePairs(p.claimMapping) : undefined,
         roleMappingClaim: p.roleMappingClaim ?? undefined,
         roleMapping: p.roleMapping ? parsePairs(p.roleMapping) : undefined,

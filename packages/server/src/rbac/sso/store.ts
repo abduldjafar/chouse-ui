@@ -29,13 +29,19 @@ export interface DbSsoProvider {
   authorizationEndpoint: string | null;
   tokenEndpoint: string | null;
   userinfoEndpoint: string | null;
-  clientId: string;
-  clientSecretEncrypted: string;
-  scopes: string;
+  clientId: string | null;
+  clientSecretEncrypted: string | null;
+  scopes: string | null;
   claimMapping: string | null;
   roleMappingClaim: string | null;
   roleMapping: string | null;
   authParams: string | null;
+  samlIdpEntityId: string | null;
+  samlIdpSsoUrl: string | null;
+  samlIdpCertificate: string | null;
+  samlSpEntityId: string | null;
+  samlNameIdFormat: string | null;
+  samlAllowIdpInitiated: boolean | null;
   enabled: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -50,13 +56,19 @@ export interface ProviderInput {
   authorizationEndpoint?: string | null;
   tokenEndpoint?: string | null;
   userinfoEndpoint?: string | null;
-  clientId: string;
-  clientSecret: string;
-  scopes: string;
+  clientId?: string | null;
+  clientSecret?: string | null;
+  scopes?: string | null;
   claimMapping?: string | null;
   roleMappingClaim?: string | null;
   roleMapping?: string | null;
   authParams?: string | null;
+  samlIdpEntityId?: string | null;
+  samlIdpSsoUrl?: string | null;
+  samlIdpCertificate?: string | null;
+  samlSpEntityId?: string | null;
+  samlNameIdFormat?: string | null;
+  samlAllowIdpInitiated?: boolean | null;
   enabled?: boolean;
   createdBy?: string | null;
 }
@@ -130,13 +142,19 @@ export async function createDbProvider(input: ProviderInput): Promise<DbSsoProvi
     authorizationEndpoint: input.authorizationEndpoint ?? null,
     tokenEndpoint: input.tokenEndpoint ?? null,
     userinfoEndpoint: input.userinfoEndpoint ?? null,
-    clientId: input.clientId,
-    clientSecretEncrypted: encryptSecret(input.clientSecret),
-    scopes: input.scopes,
+    clientId: input.clientId ?? null,
+    clientSecretEncrypted: input.clientSecret ? encryptSecret(input.clientSecret) : null,
+    scopes: input.scopes ?? null,
     claimMapping: input.claimMapping ?? null,
     roleMappingClaim: input.roleMappingClaim ?? null,
     roleMapping: input.roleMapping ?? null,
     authParams: input.authParams ?? null,
+    samlIdpEntityId: input.samlIdpEntityId ?? null,
+    samlIdpSsoUrl: input.samlIdpSsoUrl ?? null,
+    samlIdpCertificate: input.samlIdpCertificate ?? null,
+    samlSpEntityId: input.samlSpEntityId ?? null,
+    samlNameIdFormat: input.samlNameIdFormat ?? null,
+    samlAllowIdpInitiated: input.samlAllowIdpInitiated ?? null,
     enabled: input.enabled ?? true,
     createdAt: now,
     updatedAt: now,
@@ -155,10 +173,13 @@ export async function updateDbProvider(
   const set: Record<string, unknown> = { updatedAt: new Date() };
   for (const k of ["type", "displayName", "issuer", "authorizationEndpoint", "tokenEndpoint",
     "userinfoEndpoint", "clientId", "scopes", "claimMapping", "roleMappingClaim", "roleMapping",
-    "authParams", "enabled"] as const) {
+    "authParams", "samlIdpEntityId", "samlIdpSsoUrl", "samlIdpCertificate", "samlSpEntityId",
+    "samlNameIdFormat", "samlAllowIdpInitiated", "enabled"] as const) {
     if (patch[k] !== undefined) set[k] = patch[k];
   }
-  if (patch.clientSecret !== undefined) set.clientSecretEncrypted = encryptSecret(patch.clientSecret);
+  if (patch.clientSecret !== undefined) {
+    set.clientSecretEncrypted = patch.clientSecret ? encryptSecret(patch.clientSecret) : null;
+  }
   await db.update(schema.ssoProviders).set(set).where(eq(schema.ssoProviders.id, id));
 }
 
@@ -170,7 +191,7 @@ export async function deleteDbProvider(id: string): Promise<void> {
 
 /** Decrypt a provider's secret (used only by buildSsoConfig in memory). */
 export function decryptProviderSecret(p: Pick<DbSsoProvider, "clientSecretEncrypted">): string {
-  return decryptSecret(p.clientSecretEncrypted);
+  return p.clientSecretEncrypted ? decryptSecret(p.clientSecretEncrypted) : "";
 }
 
 export async function countIdentitiesByProvider(provider: string): Promise<number> {
