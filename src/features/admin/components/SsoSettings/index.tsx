@@ -727,8 +727,13 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
 
   // An optional URL field is valid when empty or a well-formed URL.
   const optUrlOk = (v: string): boolean => v.trim() === "" || isValidUrl(v);
+  // Role mapping does nothing without a claim to read it from — guard against
+  // saving mapping rows while "Claim to read" is empty (a silent footgun).
+  const hasRoleMappingRows = draft.roleMappingRows.some((r) => r.value.trim() && r.role.trim());
+  const roleMappingClaimMissing = hasRoleMappingRows && draft.roleMappingClaim.trim() === "";
   const step2Valid =
     draft.scopes.trim().length > 0 &&
+    !roleMappingClaimMissing &&
     (draft.type === "oidc"
       ? isValidUrl(draft.issuer) &&
         optUrlOk(draft.authorizationEndpoint) &&
@@ -1136,8 +1141,19 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                     value={draft.roleMappingClaim}
                     onChange={(e) => update({ roleMappingClaim: e.target.value })}
                     placeholder="groups"
-                    className={cn(INPUT_CLASS, "max-w-xs")}
+                    className={cn(
+                      INPUT_CLASS,
+                      "max-w-xs",
+                      roleMappingClaimMissing && "border-red-500/60",
+                    )}
                   />
+                  {roleMappingClaimMissing && (
+                    <p className="flex items-center gap-1.5 text-[11px] text-red-300">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      Set the claim to read (e.g. <code className="font-mono">groups</code>) — role
+                      mappings below are ignored without it.
+                    </p>
+                  )}
                 </div>
                 <RoleMappingEditor
                   rows={draft.roleMappingRows}
