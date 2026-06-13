@@ -150,6 +150,44 @@ describe("buildAuthorizationRedirect (oidc, mocked discovery)", () => {
     expect(url.searchParams.has("code_challenge")).toBe(true);
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
   });
+
+  it("applies OIDC endpoint overrides on top of discovery", async () => {
+    const oidcReal = await import("openid-client");
+    const discovered = new oidcReal.Configuration(
+      {
+        issuer: "https://accounts.google.com",
+        authorization_endpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+        token_endpoint: "https://oauth2.googleapis.com/token",
+      },
+      "client-id",
+      "client-secret"
+    );
+    mock.module("openid-client", () => ({
+      ...oidcReal,
+      discovery: async () => discovered,
+    }));
+
+    const { buildAuthorizationRedirect, resetProviderConfigurationCache } =
+      await import("./client");
+    resetProviderConfigurationCache();
+
+    const result = await buildAuthorizationRedirect(
+      {
+        id: "google-override",
+        type: "oidc" as const,
+        displayName: "Google",
+        clientId: "client-id",
+        clientSecret: "client-secret",
+        scopes: "openid email",
+        issuer: "https://accounts.google.com",
+        authorizationEndpoint: "https://proxy.example.com/authorize",
+      },
+      "https://app.example.com/callback"
+    );
+
+    // The authorization URL must use the override host, not the discovered one.
+    expect(new URL(result.url).origin).toBe("https://proxy.example.com");
+  });
 });
 
 // ---------------------------------------------------------------------------

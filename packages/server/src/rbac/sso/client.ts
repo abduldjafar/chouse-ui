@@ -29,6 +29,18 @@ export async function getProviderConfiguration(
   let cfg: oidc.Configuration;
   if (p.type === "oidc") {
     cfg = await oidc.discovery(new URL(p.issuer), p.clientId, p.clientSecret);
+    // Optional overrides: replace individual discovered endpoints (e.g. a broken
+    // or proxied one) while keeping the rest of the discovery document — notably
+    // jwks_uri and the iss-parameter support flag, which ID-token validation needs.
+    if (p.authorizationEndpoint || p.tokenEndpoint || p.userinfoEndpoint) {
+      const merged = {
+        ...cfg.serverMetadata(),
+        ...(p.authorizationEndpoint && { authorization_endpoint: p.authorizationEndpoint }),
+        ...(p.tokenEndpoint && { token_endpoint: p.tokenEndpoint }),
+        ...(p.userinfoEndpoint && { userinfo_endpoint: p.userinfoEndpoint }),
+      } as oidc.ServerMetadata;
+      cfg = new oidc.Configuration(merged, p.clientId, p.clientSecret);
+    }
   } else {
     // Configuration 3rd param accepts a bare string as shorthand for client_secret
     cfg = new oidc.Configuration(
