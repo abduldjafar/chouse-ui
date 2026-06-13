@@ -691,6 +691,7 @@ interface ProviderDraft {
   samlSpEntityId: string;
   samlNameIdFormat: string;
   samlAllowIdpInitiated: boolean;
+  samlTrustEmailVerified: boolean;
 }
 
 // Common NameID formats offered in the SAML config step.
@@ -727,6 +728,7 @@ function emptyDraft(): ProviderDraft {
     samlSpEntityId: "",
     samlNameIdFormat: "",
     samlAllowIdpInitiated: false,
+    samlTrustEmailVerified: false,
   };
 }
 
@@ -753,6 +755,7 @@ function draftFromProvider(p: SsoAdminProvider): ProviderDraft {
     samlSpEntityId: p.samlSpEntityId ?? "",
     samlNameIdFormat: p.samlNameIdFormat ?? "",
     samlAllowIdpInitiated: p.samlAllowIdpInitiated ?? false,
+    samlTrustEmailVerified: p.samlTrustEmailVerified ?? false,
   };
 }
 
@@ -870,6 +873,7 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
         samlIdpCertificate: draft.samlIdpCertificate.trim(),
         samlSpEntityId: effectiveSpEntityId,
         samlAllowIdpInitiated: draft.samlAllowIdpInitiated,
+        samlTrustEmailVerified: draft.samlTrustEmailVerified,
       };
       if (!isEditing) payload.id = draft.id.trim();
       if (draft.samlNameIdFormat.trim()) payload.samlNameIdFormat = draft.samlNameIdFormat.trim();
@@ -1303,6 +1307,22 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                       <Switch
                         checked={draft.samlAllowIdpInitiated}
                         onCheckedChange={(v) => update({ samlAllowIdpInitiated: v })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5">
+                      <div className="flex flex-col gap-0.5">
+                        <Label className="text-[13px] font-medium text-paper">
+                          Trust IdP-asserted email for account linking
+                        </Label>
+                        <span className={HELP_CLASS}>
+                          When on, a SAML sign-in is linked to an existing account with a matching email. Only
+                          enable if you trust this IdP to assert email addresses truthfully (it can otherwise take
+                          over existing accounts). New users are created either way.
+                        </span>
+                      </div>
+                      <Switch
+                        checked={draft.samlTrustEmailVerified}
+                        onCheckedChange={(v) => update({ samlTrustEmailVerified: v })}
                       />
                     </div>
                   </section>
