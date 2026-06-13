@@ -114,6 +114,16 @@ const VERSION_CHECKS: Record<string, () => Promise<void>> = {
   "1.30.0": async () => {
     expect(await h.columnExists("rbac_sso_providers", "auth_params")).toBe(true);
   },
+  "1.31.0": async () => {
+    for (const col of [
+      "saml_idp_entity_id", "saml_idp_sso_url", "saml_idp_certificate",
+      "saml_sp_entity_id", "saml_nameid_format", "saml_allow_idp_initiated",
+    ]) {
+      expect(await h.columnExists("rbac_sso_providers", col)).toBe(true);
+    }
+    expect(await h.columnIsNullable("rbac_sso_providers", "client_id")).toBe(true);
+    expect(await h.columnIsNullable("rbac_sso_providers", "scopes")).toBe(true);
+  },
 };
 
 // ---------------------------------------------------------------------------

@@ -44,7 +44,7 @@ export interface MigrationResult {
 // Current App Version
 // ============================================
 
-export const APP_VERSION = '1.30.0';
+export const APP_VERSION = '1.31.0';
 
 // ============================================
 // Error Helpers
@@ -69,6 +69,38 @@ function isUniqueConstraintError(error: unknown): boolean {
   const causeMsg = err.cause?.message ?? '';
   const check = (m: string) => m.includes('UNIQUE') || m.includes('unique');
   return check(msg) || check(causeMsg);
+}
+
+/**
+ * Rebuild rbac_sso_providers so that client_id / client_secret_encrypted / scopes
+ * are nullable. SQLite cannot DROP NOT NULL in place, so we recreate the table once.
+ * Idempotent: skips the rebuild if client_id is already nullable. The six SAML
+ * columns must already exist on the old table (added by the ADD COLUMN loop) before
+ * this runs, because the INSERT ... SELECT copies them across.
+ */
+async function rebuildSsoProvidersNullable(db: SqliteDb): Promise<void> {
+  const info = db.all(sql`SELECT name, "notnull" FROM pragma_table_info('rbac_sso_providers')`) as Array<{ name: string; notnull: number }>;
+  const clientId = info.find((c) => c.name === 'client_id');
+  if (!clientId || clientId.notnull === 0) return; // already nullable
+  db.run(sql`PRAGMA foreign_keys=OFF`);
+  db.run(sql`CREATE TABLE rbac_sso_providers__new (
+    id TEXT PRIMARY KEY NOT NULL, type TEXT NOT NULL, display_name TEXT NOT NULL,
+    issuer TEXT, authorization_endpoint TEXT, token_endpoint TEXT, userinfo_endpoint TEXT,
+    client_id TEXT, client_secret_encrypted TEXT, scopes TEXT,
+    claim_mapping TEXT, role_mapping_claim TEXT, role_mapping TEXT, auth_params TEXT,
+    saml_idp_entity_id TEXT, saml_idp_sso_url TEXT, saml_idp_certificate TEXT,
+    saml_sp_entity_id TEXT, saml_nameid_format TEXT, saml_allow_idp_initiated INTEGER,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()), updated_at INTEGER NOT NULL DEFAULT (unixepoch()), created_by TEXT
+  )`);
+  db.run(sql`INSERT INTO rbac_sso_providers__new SELECT
+    id, type, display_name, issuer, authorization_endpoint, token_endpoint, userinfo_endpoint,
+    client_id, client_secret_encrypted, scopes, claim_mapping, role_mapping_claim, role_mapping, auth_params,
+    saml_idp_entity_id, saml_idp_sso_url, saml_idp_certificate, saml_sp_entity_id, saml_nameid_format, saml_allow_idp_initiated,
+    enabled, created_at, updated_at, created_by FROM rbac_sso_providers`);
+  db.run(sql`DROP TABLE rbac_sso_providers`);
+  db.run(sql`ALTER TABLE rbac_sso_providers__new RENAME TO rbac_sso_providers`);
+  db.run(sql`PRAGMA foreign_keys=ON`);
 }
 
 // ============================================
@@ -3166,6 +3198,40 @@ export const MIGRATIONS: Migration[] = [
         );
       }
     },
+  },
+  {
+    version: '1.31.0',
+    name: 'saml_provider_columns',
+    description: 'Add SAML provider columns; relax client_id/secret/scopes to nullable',
+    up: async (db) => {
+      const dbType = getDatabaseType();
+      const cols: Array<[string, 'text' | 'bool']> = [
+        ['saml_idp_entity_id', 'text'], ['saml_idp_sso_url', 'text'],
+        ['saml_idp_certificate', 'text'], ['saml_sp_entity_id', 'text'],
+        ['saml_nameid_format', 'text'], ['saml_allow_idp_initiated', 'bool'],
+      ];
+      if (dbType === 'sqlite') {
+        for (const [name, kind] of cols) {
+          try {
+            (db as SqliteDb).run(sql.raw(`ALTER TABLE rbac_sso_providers ADD COLUMN ${name} ${kind === 'bool' ? 'INTEGER' : 'TEXT'}`));
+          } catch (error: unknown) {
+            if (!isDuplicateColumnError(error)) throw error;
+          }
+        }
+        // SQLite cannot DROP NOT NULL in place, so rebuild the table once
+        // (idempotent — see the guard in rebuildSsoProvidersNullable).
+        await rebuildSsoProvidersNullable(db as SqliteDb);
+      } else {
+        for (const [name, kind] of cols) {
+          await (db as PostgresDb).execute(sql.raw(`ALTER TABLE rbac_sso_providers ADD COLUMN IF NOT EXISTS ${name} ${kind === 'bool' ? 'BOOLEAN' : 'TEXT'}`));
+        }
+        await (db as PostgresDb).execute(sql`ALTER TABLE rbac_sso_providers ALTER COLUMN client_id DROP NOT NULL`);
+        await (db as PostgresDb).execute(sql`ALTER TABLE rbac_sso_providers ALTER COLUMN client_secret_encrypted DROP NOT NULL`);
+        await (db as PostgresDb).execute(sql`ALTER TABLE rbac_sso_providers ALTER COLUMN scopes DROP NOT NULL`);
+      }
+      logger.info({ module: 'RBAC', phase: 'migration' }, '[Migration 1.31.0] SAML columns + nullable relax');
+    },
+    down: async () => { /* forward-only; columns/relax left in place */ },
   },
 ];
 

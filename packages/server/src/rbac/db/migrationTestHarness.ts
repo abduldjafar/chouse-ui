@@ -67,6 +67,17 @@ export async function columnExists(table: string, column: string): Promise<boole
   return rows.length > 0;
 }
 
+export async function columnIsNullable(table: string, column: string): Promise<boolean> {
+  if (getDatabaseType() === "sqlite") {
+    // PRAGMA cannot be parameterized; table names here come from our own code.
+    const rows = await rawAll(sql.raw(`PRAGMA table_info(${table})`));
+    const col = rows.find((r) => r.name === column);
+    return col !== undefined && Number(col.notnull) === 0;
+  }
+  const rows = await rawAll(sql`SELECT is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name=${table} AND column_name=${column}`);
+  return rows.length > 0 && rows[0].is_nullable === "YES";
+}
+
 export async function indexExists(name: string): Promise<boolean> {
   if (getDatabaseType() === "sqlite") {
     const rows = await rawAll(sql`SELECT 1 FROM sqlite_master WHERE type='index' AND name=${name}`);
