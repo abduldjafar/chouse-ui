@@ -61,6 +61,9 @@ export async function validateSamlResponse(
   body: { SAMLResponse: string; RelayState?: string },
   acsUrl: string
 ): Promise<SsoIdentity> {
+  if (!p.samlIdpCertificate || !p.samlIdpCertificate.trim()) {
+    throw new Error(`[SAML] Provider ${p.id} has no IdP certificate configured; cannot validate assertions`);
+  }
   const { profile } = await instance(p, acsUrl).validatePostResponseAsync(body);
   if (!profile) throw new Error("[SAML] No profile in validated response");
 

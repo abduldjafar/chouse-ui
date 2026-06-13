@@ -90,6 +90,13 @@ describe("validateSamlResponse", () => {
     ).rejects.toThrow();
   });
 
+  it("rejects a provider with no IdP certificate configured (fail-closed, clear error)", async () => {
+    const { samlResponseB64 } = await makeSignedSamlResponse({});
+    await expect(
+      validateSamlResponse(provider({ samlIdpCertificate: "" }), { SAMLResponse: samlResponseB64 }, ACS),
+    ).rejects.toThrow(/no IdP certificate/i);
+  });
+
   it("applies claimMapping to override email/username source", async () => {
     const { samlResponseB64, idpCertPem } = await makeSignedSamlResponse({
       attributes: { mail: "a@b.co", uid: "alice", groups: "ch-dev" },
