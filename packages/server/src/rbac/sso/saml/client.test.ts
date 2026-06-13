@@ -4,6 +4,7 @@ import {
   validateSamlResponse,
   buildSamlAuthnRequest,
   resolveSamlProviderByIssuer,
+  extractSamlIssuer,
   resetSamlRequestCache,
   seedSamlRequestId,
   type SamlProviderConfig,
@@ -211,5 +212,21 @@ describe("resolveSamlProviderByIssuer", () => {
     ] as never[];
     expect(resolveSamlProviderByIssuer(list, "https://idp.test/entity")?.id).toBe("s");
     expect(resolveSamlProviderByIssuer(list, "https://other")).toBeUndefined();
+  });
+});
+
+describe("extractSamlIssuer", () => {
+  const cases: Array<[string, string]> = [
+    ["saml: prefix", `<samlp:Response><saml:Issuer>https://idp/entity</saml:Issuer></samlp:Response>`],
+    ["saml2: prefix (Okta)", `<saml2p:Response><saml2:Issuer Format="urn:oasis:names:tc:SAML:2.0:nameid-format:entity" xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion">https://idp/entity</saml2:Issuer></saml2p:Response>`],
+    ["no prefix (default ns)", `<Response><Issuer>https://idp/entity</Issuer></Response>`],
+    ["with surrounding whitespace", `<saml2:Issuer>\n  https://idp/entity\n</saml2:Issuer>`],
+  ];
+  it.each(cases)("extracts the issuer with %s", (_label, xml) => {
+    expect(extractSamlIssuer(xml)).toBe("https://idp/entity");
+  });
+
+  it("returns undefined when no Issuer element is present", () => {
+    expect(extractSamlIssuer(`<samlp:Response><Status/></samlp:Response>`)).toBeUndefined();
   });
 });

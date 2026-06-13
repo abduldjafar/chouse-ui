@@ -257,3 +257,19 @@ export function resolveSamlProviderByIssuer<
   }
   return undefined;
 }
+
+/**
+ * Extract the SAML Issuer (IdP entityID) from a decoded SAMLResponse, for ROUTING
+ * ONLY (pick the provider whose certificate validates the signature) — never a
+ * security boundary; node-saml re-validates the signature against the resolved
+ * provider's cert. Handles ANY namespace prefix the IdP uses (the SAML assertion
+ * namespace prefix isn't fixed): Okta emits `saml2:Issuer`, others `saml:Issuer`
+ * or an unprefixed `Issuer`. Returns the first Issuer found (Response- or
+ * Assertion-level — both carry the IdP entityID).
+ */
+export function extractSamlIssuer(decodedXml: string): string | undefined {
+  const m = decodedXml.match(
+    /<(?:[A-Za-z0-9._-]+:)?Issuer\b[^>]*>([^<]+)<\/(?:[A-Za-z0-9._-]+:)?Issuer>/,
+  );
+  return m?.[1]?.trim() || undefined;
+}

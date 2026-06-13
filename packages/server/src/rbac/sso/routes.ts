@@ -8,7 +8,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { getSsoConfig } from "./config";
 import { buildAuthorizationRedirect, exchangeCodeForIdentity } from "./client";
-import { buildSamlAuthnRequest, validateSamlResponse, resolveSamlProviderByIssuer } from "./saml/client";
+import { buildSamlAuthnRequest, validateSamlResponse, resolveSamlProviderByIssuer, extractSamlIssuer } from "./saml/client";
 import { stashTokens, claimTokens, markAssertionSeen } from "./saml/handoff";
 import { provisionSsoUser } from "./service";
 import { describeSsoError } from "./errors";
@@ -338,9 +338,7 @@ export const samlAcsHandler = async (c: Context): Promise<Response> => {
     // resolved provider's certificate below; a forged Issuer routes to a cert
     // that won't verify.
     const decoded = Buffer.from(SAMLResponse, "base64").toString("utf8");
-    const issuer = decoded
-      .match(/<(?:saml:)?Issuer[^>]*>([^<]+)<\/(?:saml:)?Issuer>/)?.[1]
-      ?.trim();
+    const issuer = extractSamlIssuer(decoded);
     if (!issuer) throw AppError.badRequest("SAMLResponse has no Issuer.");
     const provider = resolveSamlProviderByIssuer(config.providers.values(), issuer);
     if (!provider || provider.type !== "saml") {
