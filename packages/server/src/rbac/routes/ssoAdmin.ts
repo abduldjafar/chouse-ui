@@ -129,6 +129,11 @@ ssoAdminRoutes.post(
     if (envHit && envHit.source === "config") {
       throw AppError.badRequest("A config-defined provider already uses this id");
     }
+    // A DB provider with this id may already exist (including a disabled one not
+    // in the merged config) — return a clean 400 instead of a unique-constraint 500.
+    if (await store.getDbProvider(input.id)) {
+      throw AppError.badRequest("A provider with this id already exists");
+    }
     await store.createDbProvider({ ...input, createdBy: user.sub });
     await refreshSsoConfig();
     await createAuditLogWithContext(c, AUDIT_ACTIONS.SSO_PROVIDER_CREATE, user.sub, {

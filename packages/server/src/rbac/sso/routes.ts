@@ -63,9 +63,21 @@ ssoRoutes.get("/providers", (c) => {
  */
 ssoRoutes.get("/:provider/start", async (c) => {
   const config = getSsoConfig();
-  const provider = config.providers.get(c.req.param("provider"));
-  if (!config.enabled || !provider) {
-    return c.redirect("/login?ssoError=" + encodeURIComponent("Unknown SSO provider."), 302);
+  const providerId = c.req.param("provider");
+  const provider = config.providers.get(providerId);
+  if (!config.enabled) {
+    requestLogger(c.get("requestId")).warn(
+      { module: "SSO", provider: providerId, enabled: false, providerCount: config.providers.size },
+      "SSO start rejected — SSO is disabled",
+    );
+    return c.redirect("/login?ssoError=" + encodeURIComponent("SSO is currently disabled."), 302);
+  }
+  if (!provider) {
+    requestLogger(c.get("requestId")).warn(
+      { module: "SSO", provider: providerId, known: [...config.providers.keys()] },
+      "SSO start rejected — unknown provider",
+    );
+    return c.redirect("/login?ssoError=" + encodeURIComponent(`Unknown SSO provider "${providerId}".`), 302);
   }
 
   const redirect = safeRedirect(c.req.query("redirect"));
@@ -151,10 +163,11 @@ ssoRoutes.post("/callback", zValidator("json", CallbackSchema), async (c) => {
 
     // The signed cookie is the provider authority.
     const providerId = payload.provider;
-    const provider = config.enabled
-      ? config.providers.get(providerId)
-      : undefined;
-    if (!provider) throw AppError.notFound("Unknown SSO provider");
+    if (!config.enabled) throw AppError.badRequest("SSO is currently disabled.");
+    const provider = config.providers.get(providerId);
+    if (!provider) {
+      throw AppError.notFound(`Unknown SSO provider "${providerId}".`);
+    }
 
     if (payload.state !== state) {
       throw AppError.unauthorized("Sign-in state mismatch. Please try again.");

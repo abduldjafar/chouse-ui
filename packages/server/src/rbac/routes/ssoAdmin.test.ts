@@ -247,6 +247,17 @@ describe("RBAC SSO Admin Routes", () => {
       expect(mockCreateDbProvider).not.toHaveBeenCalled();
     });
 
+    it("rejects an id colliding with an existing DB provider (400, no 500)", async () => {
+      mockGetDbProvider.mockResolvedValue(makeDbProvider());
+      const res = await app.request("/sso-admin/providers", {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify(validBody),
+      });
+      expect(res.status).toBe(400);
+      expect(mockCreateDbProvider).not.toHaveBeenCalled();
+    });
+
     it("creates, refreshes, and audits without echoing the secret", async () => {
       const res = await app.request("/sso-admin/providers", {
         method: "POST",

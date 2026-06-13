@@ -49,7 +49,10 @@ export default function Login() {
   const { data: ssoProviders = [] } = useQuery({
     queryKey: ["sso-providers"],
     queryFn: ssoApi.getProviders,
-    staleTime: 5 * 60 * 1000,
+    // Keep the login buttons in sync with the live provider list — admins can
+    // enable/disable SSO at any time, so don't show a long-stale button.
+    staleTime: 15 * 1000,
+    refetchOnWindowFocus: true,
     retry: false,
   });
 

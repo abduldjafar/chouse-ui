@@ -302,6 +302,13 @@ function SettingsPanel({ canManage }: { canManage: boolean }) {
     queryKey: ["rbac-roles"],
     queryFn: () => rbacRolesApi.list(),
   });
+  // SSO settings are meaningless with zero providers — block editing until one exists.
+  const { data: providers } = useQuery({
+    queryKey: ["sso-admin-providers"],
+    queryFn: () => rbacSsoAdminApi.getProviders(),
+  });
+  const hasProviders = (providers?.length ?? 0) > 0;
+  const canEdit = canManage && hasProviders;
 
   const [form, setForm] = useState<SettingsForm>({
     enabled: false,
@@ -374,9 +381,19 @@ function SettingsPanel({ canManage }: { canManage: boolean }) {
           <Switch
             checked={form.enabled}
             onCheckedChange={(v) => setForm((f) => ({ ...f, enabled: v }))}
-            disabled={!canManage}
+            disabled={!canEdit}
           />
         </div>
+
+        {/* Disabled-but-configured notice: providers exist but SSO is off. */}
+        {hasProviders && !form.enabled && (
+          <div className="flex items-center gap-2 rounded-xs border border-amber-900/60 bg-amber-950/30 px-3 py-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-amber-300" />
+            <p className="text-[12px] text-amber-200">
+              SSO is disabled — the login page won't show provider buttons. Turn it on to let users sign in.
+            </p>
+          </div>
+        )}
 
         {/* Base URL + derived redirect URI */}
         <div className="space-y-1.5">
@@ -385,13 +402,17 @@ function SettingsPanel({ canManage }: { canManage: boolean }) {
             value={form.baseUrl}
             onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
             placeholder="https://chouse.example.com"
-            className={INPUT_CLASS}
-            disabled={!canManage}
+            className={cn(INPUT_CLASS, urlInvalid(form.baseUrl) && "border-red-500/60")}
+            disabled={!canEdit}
           />
-          <p className={HELP_CLASS}>
-            Register this redirect URI with your provider:{" "}
-            <code className="font-mono text-paper-muted">{redirectUri}</code>
-          </p>
+          {urlInvalid(form.baseUrl) ? (
+            <p className="text-[11px] text-red-300">Enter a valid URL (https://…).</p>
+          ) : (
+            <p className={HELP_CLASS}>
+              Register this redirect URI with your provider:{" "}
+              <code className="font-mono text-paper-muted">{redirectUri}</code>
+            </p>
+          )}
         </div>
 
         {/* Default role */}
@@ -400,7 +421,7 @@ function SettingsPanel({ canManage }: { canManage: boolean }) {
           <Select
             value={form.defaultRole}
             onValueChange={(v) => setForm((f) => ({ ...f, defaultRole: v }))}
-            disabled={!canManage}
+            disabled={!canEdit}
           >
             <SelectTrigger className={INPUT_CLASS}>
               <SelectValue placeholder="Select a role" />
@@ -432,15 +453,24 @@ function SettingsPanel({ canManage }: { canManage: boolean }) {
           <Switch
             checked={form.autoLinkByEmail}
             onCheckedChange={(v) => setForm((f) => ({ ...f, autoLinkByEmail: v }))}
-            disabled={!canManage}
+            disabled={!canEdit}
           />
         </div>
 
-        {canManage && (
+        {canManage && !hasProviders && (
+          <div className="flex items-center gap-2 rounded-xs border border-amber-900/60 bg-amber-950/30 px-3 py-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-amber-300" />
+            <p className="text-[12px] text-amber-200">
+              Add at least one provider below before configuring global SSO settings.
+            </p>
+          </div>
+        )}
+
+        {canEdit && (
           <div className="flex justify-end border-t border-ink-500 pt-4">
             <Button
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending}
+              disabled={saveMutation.isPending || urlInvalid(form.baseUrl)}
               className="h-9 gap-2 rounded-xs bg-brand px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-50 hover:bg-brand-soft disabled:opacity-50"
             >
               {saveMutation.isPending ? (
@@ -465,6 +495,7 @@ interface ProviderDraft {
   id: string;
   type: ProviderType;
   displayName: string;
+  enabled: boolean;
   clientId: string;
   clientSecret: string;
   // endpoints / mapping
@@ -483,6 +514,7 @@ function emptyDraft(): ProviderDraft {
     id: "",
     type: "oidc",
     displayName: "",
+    enabled: true,
     clientId: "",
     clientSecret: "",
     issuer: "",
@@ -501,6 +533,7 @@ function draftFromProvider(p: SsoAdminProvider): ProviderDraft {
     id: p.id,
     type: p.type,
     displayName: p.displayName,
+    enabled: p.enabled,
     clientId: p.clientId ?? "",
     clientSecret: "",
     issuer: p.issuer ?? "",
@@ -575,6 +608,7 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
     const payload: Record<string, unknown> = {
       type: draft.type,
       displayName: draft.displayName.trim(),
+      enabled: draft.enabled,
       clientId: draft.clientId.trim(),
       scopes: draft.scopes.trim(),
     };
@@ -640,7 +674,7 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
     },
     onSuccess: () => {
       toast.success(isEditing ? "Provider updated" : "Provider created");
-      queryClient.invalidateQueries({ queryKey: ["sso-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["sso-admin-providers"] });
       onClose();
     },
     onError: (error: Error) => {
@@ -671,19 +705,25 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
         <div className="flex items-center gap-2 px-1 pb-2">
           {STEP_LABELS.map((label, i) => {
             const n = i + 1;
+            const last = STEP_LABELS.length;
+            // Final step turns green once the test passes, red if it failed.
+            const isComplete = step > n || (n === last && testPassed);
+            const isFailed = n === last && step === last && testResult != null && !testResult.ok;
             return (
               <div key={label} className="flex items-center gap-2">
                 <span
                   className={cn(
                     "grid h-5 w-5 place-items-center rounded-full font-mono text-[10px]",
-                    step === n
-                      ? "bg-brand text-ink-50"
-                      : step > n
-                        ? "bg-emerald-600 text-ink-50"
-                        : "bg-ink-300 text-paper-faint",
+                    isComplete
+                      ? "bg-emerald-600 text-ink-50"
+                      : isFailed
+                        ? "bg-red-600 text-ink-50"
+                        : step === n
+                          ? "bg-brand text-ink-50"
+                          : "bg-ink-300 text-paper-faint",
                   )}
                 >
-                  {step > n ? <Check className="h-3 w-3" /> : n}
+                  {isComplete ? <Check className="h-3 w-3" /> : isFailed ? <X className="h-3 w-3" /> : n}
                 </span>
                 <span
                   className={cn(
@@ -772,6 +812,15 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
                   placeholder={isEditing && editing?.hasSecret ? SECRET_PLACEHOLDER : "••••••••"}
                   className={INPUT_CLASS}
                 />
+              </div>
+
+              {/* Enabled toggle */}
+              <div className="flex items-center justify-between gap-3 rounded-xs border border-ink-500 bg-ink-200 px-3 py-2.5">
+                <div className="flex flex-col gap-0.5">
+                  <Label className="text-[13px] font-medium text-paper">Enabled</Label>
+                  <span className={HELP_CLASS}>Disabled providers are hidden from the login page.</span>
+                </div>
+                <Switch checked={draft.enabled} onCheckedChange={(v) => update({ enabled: v })} />
               </div>
             </div>
           )}
@@ -1024,7 +1073,7 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
 function ProvidersPanel({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
   const { data: providers, isLoading } = useQuery({
-    queryKey: ["sso-providers"],
+    queryKey: ["sso-admin-providers"],
     queryFn: () => rbacSsoAdminApi.getProviders(),
   });
 
@@ -1036,7 +1085,7 @@ function ProvidersPanel({ canManage }: { canManage: boolean }) {
     mutationFn: (id: string) => rbacSsoAdminApi.deleteProvider(id),
     onSuccess: (result) => {
       toast.success(`Provider deleted — unlinked ${result.unlinkedUserCount} user(s)`);
-      queryClient.invalidateQueries({ queryKey: ["sso-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["sso-admin-providers"] });
       setToDelete(null);
     },
     onError: (error: Error) => {
