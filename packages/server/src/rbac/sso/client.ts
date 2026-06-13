@@ -40,6 +40,10 @@ export async function getProviderConfiguration(
   const hit = configCache.get(p.id);
   if (hit) return hit;
 
+  if (p.type === "saml") {
+    throw new Error("[SSO] getProviderConfiguration does not handle SAML providers (use saml/client.ts)");
+  }
+
   let cfg: oidc.Configuration;
   if (p.type === "oidc") {
     cfg = await oidc.discovery(new URL(p.issuer), p.clientId, p.clientSecret);
@@ -52,7 +56,7 @@ export async function getProviderConfiguration(
         ...(p.authorizationEndpoint && { authorization_endpoint: p.authorizationEndpoint }),
         ...(p.tokenEndpoint && { token_endpoint: p.tokenEndpoint }),
         ...(p.userinfoEndpoint && { userinfo_endpoint: p.userinfoEndpoint }),
-      } as oidc.ServerMetadata;
+      } as unknown as oidc.ServerMetadata;
       cfg = new oidc.Configuration(merged, p.clientId, p.clientSecret);
     }
   } else {
@@ -88,6 +92,9 @@ export async function buildAuthorizationRedirect(
   p: SsoProviderConfig,
   redirectUri: string
 ): Promise<AuthorizationRedirect> {
+  if (p.type === "saml") {
+    throw new Error("[SSO] buildAuthorizationRedirect does not handle SAML providers (use saml/client.ts)");
+  }
   const cfg = await getProviderConfiguration(p);
   const codeVerifier = oidc.randomPKCECodeVerifier();
   const codeChallenge = await oidc.calculatePKCECodeChallenge(codeVerifier);
@@ -127,6 +134,9 @@ export async function exchangeCodeForIdentity(
   callbackUrl: URL,
   checks: { codeVerifier: string; state: string; nonce: string }
 ): Promise<SsoIdentity> {
+  if (p.type === "saml") {
+    throw new Error("[SSO] exchangeCodeForIdentity does not handle SAML providers (use saml/client.ts)");
+  }
   const cfg = await getProviderConfiguration(p);
 
   const tokens = await oidc.authorizationCodeGrant(cfg, callbackUrl, {
