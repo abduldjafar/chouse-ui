@@ -1651,6 +1651,7 @@ export interface SsoAdminProvider {
   claimMapping?: string | null;
   roleMappingClaim?: string | null;
   roleMapping?: string | null;
+  authParams?: string | null;
   linkedUserCount?: number;
 }
 

@@ -322,6 +322,17 @@ describe("RBAC SSO Admin Routes", () => {
       expect(details.clientSecretChanged).toBe(true);
       expect(JSON.stringify(details)).not.toContain("supersecret");
     });
+
+    it("persists auth_params passed in the body", async () => {
+      const res = await app.request("/sso-admin/providers", {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ ...validBody, id: "with-params", authParams: "hd:acme.com,prompt:consent" }),
+      });
+      expect(res.status).toBe(201);
+      const arg = mockCreateDbProvider.mock.calls.at(-1)![0] as unknown as { authParams?: string };
+      expect(arg.authParams).toBe("hd:acme.com,prompt:consent");
+    });
   });
 
   describe("PATCH /providers/:id", () => {

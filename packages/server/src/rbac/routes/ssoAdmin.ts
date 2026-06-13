@@ -50,6 +50,7 @@ const ProviderBody = z.object({
   claimMapping: z.string().optional(),
   roleMappingClaim: z.string().optional(),
   roleMapping: z.string().optional(),
+  authParams: z.string().optional(),
   enabled: z.boolean().optional(),
 });
 
