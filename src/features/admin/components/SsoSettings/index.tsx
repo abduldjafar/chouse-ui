@@ -709,7 +709,11 @@ function ProviderWizard({ open, onClose, editing }: ProviderWizardProps) {
     },
     onSuccess: () => {
       toast.success(isEditing ? "Provider updated" : "Provider created");
+      // Adding/editing a provider changes the merged SSO config, so the settings
+      // panel's gating (hasProviders + source/read-only) must re-derive from the
+      // server — invalidate both queries, not just the provider list.
       queryClient.invalidateQueries({ queryKey: ["sso-admin-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["sso-settings"] });
       onClose();
     },
     onError: (error: Error) => {
@@ -1122,6 +1126,7 @@ function ProvidersPanel({ canManage }: { canManage: boolean }) {
     onSuccess: (result) => {
       toast.success(`Provider deleted — unlinked ${result.unlinkedUserCount} user(s)`);
       queryClient.invalidateQueries({ queryKey: ["sso-admin-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["sso-settings"] });
       setToDelete(null);
     },
     onError: (error: Error) => {
@@ -1137,6 +1142,7 @@ function ProvidersPanel({ canManage }: { canManage: boolean }) {
     onSuccess: (_data, { enabled }) => {
       toast.success(enabled ? "Provider enabled" : "Provider disabled");
       queryClient.invalidateQueries({ queryKey: ["sso-admin-providers"] });
+      queryClient.invalidateQueries({ queryKey: ["sso-settings"] });
       setToDisable(null);
     },
     onError: (error: Error) => {
