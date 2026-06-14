@@ -315,6 +315,11 @@ export async function refreshSsoConfig(): Promise<void> {
     return;
   }
   resetProviderConfigurationCache();
+  // Re-resolve password-login state: disabling it is gated on having ≥1 usable
+  // SSO provider, which can change with any admin mutation. Dynamic import keeps
+  // authConfig → config the only static edge (no cycle).
+  const { refreshPasswordLoginState } = await import('../authConfig');
+  refreshPasswordLoginState();
   logger.info(
     {
       module: 'SSO',

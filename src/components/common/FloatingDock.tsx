@@ -34,6 +34,11 @@ import {
 } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useRbacStore, RBAC_PERMISSIONS } from "@/stores";
+import {
+  ADMIN_ACCESS_PERMISSIONS,
+  MONITORING_ACCESS_PERMISSIONS,
+  EXPLORER_ACCESS_PERMISSIONS,
+} from "@/lib/navAccess";
 import { motion, useDragControls, PanInfo, AnimatePresence } from "framer-motion";
 import { withBasePath } from "@/lib/basePath";
 import ConnectionSelector from "./ConnectionSelector";
@@ -332,28 +337,11 @@ export default function FloatingDock() {
     };
   }, []);
 
-  const canViewMonitoring = hasAnyPermission([
-    RBAC_PERMISSIONS.LIVE_QUERIES_VIEW,
-    RBAC_PERMISSIONS.METRICS_VIEW,
-    RBAC_PERMISSIONS.METRICS_VIEW_ADVANCED,
-    RBAC_PERMISSIONS.LOGS_VIEW,
-    RBAC_PERMISSIONS.PARTS_VIEW,
-    RBAC_PERMISSIONS.SCHEMA_ADVISOR_VIEW,
-    RBAC_PERMISSIONS.CLUSTER_VIEW,
-    RBAC_PERMISSIONS.ERRORS_VIEW,
-  ]);
+  const canViewMonitoring = hasAnyPermission(MONITORING_ACCESS_PERMISSIONS);
 
-  const canViewAdmin = hasAnyPermission([
-    RBAC_PERMISSIONS.USERS_VIEW,
-    RBAC_PERMISSIONS.USERS_CREATE,
-    RBAC_PERMISSIONS.ROLES_VIEW,
-    RBAC_PERMISSIONS.AUDIT_VIEW,
-  ]);
+  const canViewAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
 
-  const canViewExplorer = hasAnyPermission([
-    RBAC_PERMISSIONS.DB_VIEW,
-    RBAC_PERMISSIONS.TABLE_VIEW,
-  ]);
+  const canViewExplorer = hasAnyPermission(EXPLORER_ACCESS_PERMISSIONS);
 
   const canViewFleet = hasAnyPermission([RBAC_PERMISSIONS.FLEET_VIEW]);
   const canViewDoctor = hasAnyPermission([RBAC_PERMISSIONS.DOCTOR_VIEW]);

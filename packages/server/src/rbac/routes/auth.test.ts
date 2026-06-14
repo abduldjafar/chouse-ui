@@ -35,6 +35,12 @@ mock.module("../services/password", () => ({
     validatePasswordStrength: mockValidatePasswordStrength
 }));
 
+// Mock Auth Config — controls whether password login is enabled.
+const mockGetPasswordLoginEnabled = mock(() => true);
+mock.module("../authConfig", () => ({
+    getPasswordLoginEnabled: mockGetPasswordLoginEnabled,
+}));
+
 // Mock JWT Service
 mock.module("../services/jwt", () => ({
     verifyRefreshToken: mock(async () => ({ sub: 'user-123', roles: ['viewer'], sessionId: 'sess-123' })),
@@ -91,6 +97,8 @@ describe("RBAC Auth Routes", () => {
         mockCreateAuditLogWithContext.mockClear();
         mockValidatePasswordStrength.mockClear();
         mockDestroyUserSessions.mockClear();
+        mockGetPasswordLoginEnabled.mockClear();
+        mockGetPasswordLoginEnabled.mockReturnValue(true);
     });
 
     afterAll(() => {
@@ -152,6 +160,46 @@ describe("RBAC Auth Routes", () => {
                     status: "failure",
                 })
             );
+        });
+
+        it("should reject and audit when password login is disabled", async () => {
+            mockGetPasswordLoginEnabled.mockReturnValue(false);
+
+            const res = await app.request("/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ identifier: "test", password: "password" })
+            });
+
+            expect(res.status).toBe(403);
+            // Credentials must never be checked when the route is disabled.
+            expect(mockAuthenticateUser).not.toHaveBeenCalled();
+            expect(mockCreateAuditLogWithContext).toHaveBeenCalledWith(
+                expect.anything(),
+                "auth.login_failed",
+                undefined,
+                expect.objectContaining({
+                    details: { identifier: "test", reason: "password_login_disabled" },
+                    status: "failure",
+                })
+            );
+        });
+    });
+
+    describe("GET /auth/config", () => {
+        it("reports passwordLoginEnabled: true by default", async () => {
+            const res = await app.request("/auth/config");
+            expect(res.status).toBe(200);
+            const body = await res.json();
+            expect(body.data.passwordLoginEnabled).toBe(true);
+        });
+
+        it("reports passwordLoginEnabled: false when disabled", async () => {
+            mockGetPasswordLoginEnabled.mockReturnValue(false);
+            const res = await app.request("/auth/config");
+            expect(res.status).toBe(200);
+            const body = await res.json();
+            expect(body.data.passwordLoginEnabled).toBe(false);
         });
     });
 

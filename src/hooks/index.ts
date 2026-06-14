@@ -64,7 +64,7 @@ export type { LogsPagePreferences } from './useLogsPreferences';
 
 // User management preferences hook
 export { useUserManagementPreferences } from './useUserManagementPreferences';
-export type { UserManagementPreferences } from './useUserManagementPreferences';
+export type { UserManagementPreferences, UserManagementViewMode } from './useUserManagementPreferences';
 // Live queries hooks
 export {
   useLiveQueries,

@@ -28,6 +28,7 @@ import {
   getRbacUser,
   requirePermission
 } from '../middleware/rbacAuth';
+import { getPasswordLoginEnabled } from '../authConfig';
 import { requestLogger } from '../../utils/logger';
 import { AppError } from '../../types';
 
@@ -63,6 +64,20 @@ authRoutes.post('/login', zValidator('json', LoginSchema), async (c) => {
   const { identifier, password } = c.req.valid('json');
   const ipAddress = getClientIp(c);
   const userAgent = c.req.header('User-Agent');
+
+  // Password login can be turned off (forcing SSO). Reject before touching
+  // credentials, and audit the attempt — a password POST while disabled is a
+  // security-relevant signal. change-password is unaffected: it verifies the
+  // current password via authenticateUser directly, not through this route.
+  if (!getPasswordLoginEnabled()) {
+    await createAuditLogWithContext(c, AUDIT_ACTIONS.LOGIN_FAILED, undefined, {
+      details: { identifier, reason: 'password_login_disabled' },
+      ipAddress,
+      status: 'failure',
+      errorMessage: 'Password login is disabled',
+    });
+    throw AppError.forbidden('Password login is disabled. Please use single sign-on.');
+  }
 
   let result;
   try {
@@ -104,6 +119,19 @@ authRoutes.post('/login', zValidator('json', LoginSchema), async (c) => {
       user: result.user,
       tokens: result.tokens,
     },
+  });
+});
+
+/**
+ * GET /rbac/auth/config
+ * Public auth configuration for the login page (no auth required). Tells the
+ * frontend whether to render the password form. Mirrors the public SSO
+ * /providers endpoint.
+ */
+authRoutes.get('/config', (c) => {
+  return c.json({
+    success: true,
+    data: { passwordLoginEnabled: getPasswordLoginEnabled() },
   });
 });
 

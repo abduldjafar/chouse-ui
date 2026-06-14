@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useRbacStore, RBAC_PERMISSIONS } from "@/stores";
+import { ADMIN_ACCESS_PERMISSIONS, EXPLORER_ACCESS_PERMISSIONS } from "@/lib/navAccess";
 import { Loader2 } from "lucide-react";
 
 /**
@@ -35,10 +36,7 @@ export const DefaultRedirect = () => {
   // the app should see every cluster, not a single-connection home.
   const canViewFleet = hasAnyPermission([RBAC_PERMISSIONS.CONNECTIONS_VIEW]);
   const canViewOverview = true; // Visible to all authenticated users
-  const canViewExplorer = hasAnyPermission([
-    RBAC_PERMISSIONS.DB_VIEW,
-    RBAC_PERMISSIONS.TABLE_VIEW,
-  ]);
+  const canViewExplorer = hasAnyPermission(EXPLORER_ACCESS_PERMISSIONS);
   const canViewMetrics = hasAnyPermission([
     RBAC_PERMISSIONS.METRICS_VIEW,
     RBAC_PERMISSIONS.METRICS_VIEW_ADVANCED,
@@ -47,12 +45,7 @@ export const DefaultRedirect = () => {
     RBAC_PERMISSIONS.QUERY_HISTORY_VIEW,
     RBAC_PERMISSIONS.QUERY_HISTORY_VIEW_ALL,
   ]);
-  const canViewAdmin = hasAnyPermission([
-    RBAC_PERMISSIONS.USERS_VIEW,
-    RBAC_PERMISSIONS.USERS_CREATE,
-    RBAC_PERMISSIONS.ROLES_VIEW,
-    RBAC_PERMISSIONS.AUDIT_VIEW,
-  ]);
+  const canViewAdmin = hasAnyPermission(ADMIN_ACCESS_PERMISSIONS);
   const canViewSettings = hasPermission(RBAC_PERMISSIONS.SETTINGS_VIEW);
 
   // Redirect to first available page in priority order

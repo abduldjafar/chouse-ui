@@ -13,7 +13,7 @@ import * as z from "zod";
 import { ArrowUpRight, ChevronDown, Eye, EyeOff, Loader2, Lock, ShieldCheck, User } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useRbacStore } from "@/stores";
-import { ssoApi } from "@/api/rbac";
+import { ssoApi, authConfigApi } from "@/api/rbac";
 import { SsoProviderIcon } from "@/features/auth/SsoProviderIcon";
 
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,17 @@ export default function Login() {
   const ssoHasMore = ssoProviders.length > SSO_COLLAPSED_COUNT;
   const visibleSsoProviders =
     ssoExpanded || !ssoHasMore ? ssoProviders : ssoProviders.slice(0, SSO_COLLAPSED_COUNT);
+
+  // Whether to render the password form. Defaults to true so a slow/failed
+  // fetch never hides the only way in; the server is the source of truth.
+  const { data: authConfig } = useQuery({
+    queryKey: ["auth-config"],
+    queryFn: authConfigApi.get,
+    staleTime: 15 * 1000,
+    refetchOnWindowFocus: true,
+    retry: false,
+  });
+  const passwordLoginEnabled = authConfig?.passwordLoginEnabled ?? true;
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -174,15 +185,37 @@ export default function Login() {
                     </button>
                   )}
 
-                  <div className="my-1 flex items-center gap-3" aria-hidden>
-                    <span className="h-px flex-1 bg-ink-500" />
-                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
-                      or sign in with password
-                    </span>
-                    <span className="h-px flex-1 bg-ink-500" />
-                  </div>
+                  {passwordLoginEnabled && (
+                    <div className="my-1 flex items-center gap-3" aria-hidden>
+                      <span className="h-px flex-1 bg-ink-500" />
+                      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-paper-faint">
+                        or sign in with password
+                      </span>
+                      <span className="h-px flex-1 bg-ink-500" />
+                    </div>
+                  )}
                 </div>
               )}
+
+              {/* Auth error — shown whether or not the password form is rendered
+                  (e.g. an ssoError from a failed IdP redirect). */}
+              {(error || ssoError) && (
+                <div
+                  role="alert"
+                  className="mb-5 flex items-start gap-2 rounded-xs border border-red-900/60 bg-red-950/40 px-3 py-2.5 text-[13px] text-red-200"
+                >
+                  <span aria-hidden className="font-mono text-red-300">!</span>
+                  <span>{error || ssoError}</span>
+                </div>
+              )}
+
+              {!passwordLoginEnabled && (
+                <p className="text-center text-[13px] text-paper-muted">
+                  Password sign-in is disabled. Continue with single sign-on above.
+                </p>
+              )}
+
+              {passwordLoginEnabled && (
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-5">
                   <FormField
@@ -253,16 +286,6 @@ export default function Login() {
                     )}
                   />
 
-                  {(error || ssoError) && (
-                    <div
-                      role="alert"
-                      className="flex items-start gap-2 rounded-xs border border-red-900/60 bg-red-950/40 px-3 py-2.5 text-[13px] text-red-200"
-                    >
-                      <span aria-hidden className="font-mono text-red-300">!</span>
-                      <span>{error || ssoError}</span>
-                    </div>
-                  )}
-
                   <Button
                     type="submit"
                     disabled={isLoading}
@@ -283,6 +306,7 @@ export default function Login() {
                   </Button>
                 </form>
               </Form>
+              )}
             </div>
 
             {/* Footer */}

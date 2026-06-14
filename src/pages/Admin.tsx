@@ -11,7 +11,8 @@ import ClickHouseUsersManagement from "@/features/admin/components/ClickHouseUse
 import ClickHouseRolesManagement from "@/features/admin/components/ClickHouseRoles";
 import AiModelsManagement from "@/features/admin/components/AiModels";
 import SsoSettings from "@/features/admin/components/SsoSettings";
-import { useRbacStore, RBAC_PERMISSIONS } from "@/stores";
+import { useRbacStore } from "@/stores";
+import { ADMIN_TAB_PERMISSIONS, type AdminTabKey } from "@/lib/navAccess";
 import { cn } from "@/lib/utils";
 import {
   Bot,
@@ -32,17 +33,6 @@ interface AdminTabConfig {
   label: string;
   description: string;
 }
-
-type AdminTabKey =
-  | "users"
-  | "roles"
-  | "data-access"
-  | "connections"
-  | "clickhouse-users"
-  | "clickhouse-roles"
-  | "audit"
-  | "ai-models"
-  | "sso";
 
 const ADMIN_TAB_CONFIG: Record<AdminTabKey, AdminTabConfig> = {
   users: {
@@ -181,17 +171,19 @@ function SectionTab({ tabKey, isActive, onClick }: SectionTabProps) {
 
 export default function Admin() {
   const [isInfoOpen, setIsInfoOpen] = useState(false);
-  const { hasPermission } = useRbacStore();
+  const { hasAnyPermission } = useRbacStore();
 
-  const canViewUsers = hasPermission(RBAC_PERMISSIONS.USERS_VIEW);
-  const canViewRoles = hasPermission(RBAC_PERMISSIONS.ROLES_VIEW);
-  const canViewDataAccess = hasPermission(RBAC_PERMISSIONS.DATA_ACCESS_VIEW);
-  const canViewAudit = hasPermission(RBAC_PERMISSIONS.AUDIT_VIEW);
-  const canViewConnections = hasPermission(RBAC_PERMISSIONS.CONNECTIONS_VIEW);
-  const canViewClickHouseUsers = hasPermission(RBAC_PERMISSIONS.CH_USERS_VIEW);
-  const canViewClickHouseRoles = hasPermission(RBAC_PERMISSIONS.CH_ROLES_VIEW);
-  const canViewAiModels = hasPermission(RBAC_PERMISSIONS.AI_MODELS_VIEW);
-  const canViewSso = hasPermission(RBAC_PERMISSIONS.SSO_VIEW);
+  // Tab visibility derives from the shared per-tab permission map (single source
+  // of truth shared with the route guard and nav) so the lists can't drift.
+  const canViewUsers = hasAnyPermission(ADMIN_TAB_PERMISSIONS.users);
+  const canViewRoles = hasAnyPermission(ADMIN_TAB_PERMISSIONS.roles);
+  const canViewDataAccess = hasAnyPermission(ADMIN_TAB_PERMISSIONS["data-access"]);
+  const canViewAudit = hasAnyPermission(ADMIN_TAB_PERMISSIONS.audit);
+  const canViewConnections = hasAnyPermission(ADMIN_TAB_PERMISSIONS.connections);
+  const canViewClickHouseUsers = hasAnyPermission(ADMIN_TAB_PERMISSIONS["clickhouse-users"]);
+  const canViewClickHouseRoles = hasAnyPermission(ADMIN_TAB_PERMISSIONS["clickhouse-roles"]);
+  const canViewAiModels = hasAnyPermission(ADMIN_TAB_PERMISSIONS["ai-models"]);
+  const canViewSso = hasAnyPermission(ADMIN_TAB_PERMISSIONS.sso);
 
   const { tab } = useParams<{ tab: string }>();
   const navigate = useNavigate();

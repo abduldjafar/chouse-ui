@@ -165,3 +165,10 @@ auth:
       #         # role_mapping_claim: groups
       #         # role_mapping: "idp-group-a:admin,idp-group-b:developer"
       #         # Register this ACS URL at the IdP:  https://chouse.example.com/auth/sso/saml/acs
+
+  # Password login — optional. Username/password sign-in is ON by default.
+  # Set enabled: false to require SSO. Fail-safe: ignored unless at least one
+  # usable SSO provider is configured — if none exists, password login stays
+  # ENABLED to avoid lockout.
+  password_login:
+    enabled: true

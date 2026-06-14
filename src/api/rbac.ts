@@ -1866,3 +1866,25 @@ export const ssoApi = {
     return data.data;
   },
 };
+
+export interface AuthConfig {
+  passwordLoginEnabled: boolean;
+}
+
+export const authConfigApi = {
+  /** Public auth configuration for the login page (whether to show the password form). */
+  async get(): Promise<AuthConfig> {
+    const response = await fetch('/api/rbac/auth/config', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new ApiError(
+        data.error?.message || 'Failed to load auth configuration',
+        response.status,
+        data.error?.code
+      );
+    }
+    return data.data;
+  },
+};

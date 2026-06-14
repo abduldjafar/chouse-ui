@@ -6,6 +6,7 @@ import TryLab from './components/TryLab';
 import Highlights from './components/Highlights';
 import QuickStart from './components/QuickStart';
 import DockerDeploy from './components/DockerDeploy';
+import Sso from './components/Sso';
 import FAQ from './components/FAQ';
 import Changelog from './components/Changelog';
 import Footer from './components/Footer';
@@ -21,6 +22,7 @@ function App() {
       <Highlights />
       <QuickStart />
       <DockerDeploy />
+      <Sso />
       <FAQ />
       <Changelog />
       <Footer />

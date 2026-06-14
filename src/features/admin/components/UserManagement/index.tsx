@@ -5,7 +5,7 @@
  */
 
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { usePaginationPreference, useUserManagementPreferences } from "@/hooks";
+import { usePaginationPreference, useUserManagementPreferences, type UserManagementViewMode } from "@/hooks";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { log } from "@/lib/log";
@@ -30,6 +30,10 @@ import {
   MoreVertical,
   Mail,
   Clock,
+  LayoutGrid,
+  Rows3,
+  ShieldCheck,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +88,9 @@ const ROLE_CODES: Record<string, string> = {
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 
+// Editorial table header cell (matches ClickHouseUsers / RbacRolesTable).
+const TH_CLS = "px-4 py-2.5 text-left font-mono text-[10px] uppercase tracking-[0.14em] text-paper-dim";
+
 const UserManagement: React.FC = () => {
   const navigate = useNavigate();
   const { hasPermission, user: currentUser, isSuperAdmin } = useRbacStore();
@@ -105,6 +112,9 @@ const UserManagement: React.FC = () => {
   const [roleFilter, setRoleFilter] = useState<string>(userMgmtPrefs.defaultRoleFilter || "all");
   const [statusFilter, setStatusFilter] = useState<string>(userMgmtPrefs.defaultStatusFilter || "all");
 
+  // Card ⇄ list layout, persisted to preferences.
+  const [viewMode, setViewMode] = useState<UserManagementViewMode>(userMgmtPrefs.defaultViewMode || "card");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(defaultPageSize);
@@ -120,6 +130,7 @@ const UserManagement: React.FC = () => {
     if (userMgmtPrefs.defaultSearchQuery !== undefined) setSearchQuery(userMgmtPrefs.defaultSearchQuery);
     if (userMgmtPrefs.defaultRoleFilter) setRoleFilter(userMgmtPrefs.defaultRoleFilter);
     if (userMgmtPrefs.defaultStatusFilter) setStatusFilter(userMgmtPrefs.defaultStatusFilter);
+    if (userMgmtPrefs.defaultViewMode) setViewMode(userMgmtPrefs.defaultViewMode);
   }, [userMgmtPrefs]);
 
   // Update preferences when state changes (debounced)
@@ -153,6 +164,15 @@ const UserManagement: React.FC = () => {
   // Permission checks
   const canCreateUsers = hasPermission(RBAC_PERMISSIONS.USERS_CREATE);
   const canUpdateUsers = hasPermission(RBAC_PERMISSIONS.USERS_UPDATE);
+  // View-only users (can see the directory but not manage it) don't get to see
+  // PII — email and last-login activity are hidden from them in both layouts.
+  // Anyone who can manage users (create/update) keeps full visibility.
+  const canViewSensitive = canCreateUsers || canUpdateUsers || isSuperAdmin();
+
+  const changeViewMode = useCallback((mode: UserManagementViewMode) => {
+    setViewMode(mode);
+    updateUserMgmtPrefs({ defaultViewMode: mode });
+  }, [updateUserMgmtPrefs]);
 
   // Fetch roles on mount
   useEffect(() => {
@@ -282,6 +302,57 @@ const UserManagement: React.FC = () => {
     };
   };
 
+  // Per-user action permissions, shared by the card and list layouts.
+  const getUserPerms = useCallback((user: RbacUser) => {
+    const isCurrentUser = user.id === currentUser?.id;
+    const userIsSuperAdmin = user.roles.includes("super_admin");
+    // Basic admins cannot edit super admins.
+    const canEditThisUser = canUpdateUsers && (isSuperAdmin() || !userIsSuperAdmin);
+    // Reset password is only meaningful for password-based users — SSO accounts
+    // have no usable local password. You can't deactivate yourself.
+    const canResetPassword = canEditThisUser && !user.hasSsoIdentity;
+    const canToggleActive = canEditThisUser && !isCurrentUser;
+    return {
+      isCurrentUser,
+      canEditThisUser,
+      canResetPassword,
+      canToggleActive,
+      hasActions: canResetPassword || canToggleActive,
+    };
+  }, [currentUser?.id, canUpdateUsers, isSuperAdmin]);
+
+  // Dropdown menu items shared by both layouts.
+  const renderUserMenuItems = (user: RbacUser, perms: ReturnType<typeof getUserPerms>) => (
+    <>
+      {perms.canResetPassword && (
+        <DropdownMenuItem onClick={() => openResetPasswordDialog(user)} className="cursor-pointer focus:bg-ink-200">
+          <Key className="mr-2 h-3.5 w-3.5" />
+          Reset password
+        </DropdownMenuItem>
+      )}
+      {perms.canResetPassword && perms.canToggleActive && <DropdownMenuSeparator className="bg-ink-500" />}
+      {perms.canToggleActive && (
+        user.isActive ? (
+          <DropdownMenuItem
+            className="cursor-pointer text-amber-400 hover:bg-amber-950/40 focus:bg-amber-950/40 focus:text-amber-300"
+            onClick={() => openToggleActiveDialog(user)}
+          >
+            <UserX className="mr-2 h-3.5 w-3.5" />
+            Deactivate user
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            className="cursor-pointer text-emerald-400 hover:bg-emerald-950/40 focus:bg-emerald-950/40 focus:text-emerald-300"
+            onClick={() => openToggleActiveDialog(user)}
+          >
+            <UserCheck className="mr-2 h-3.5 w-3.5" />
+            Activate user
+          </DropdownMenuItem>
+        )
+      )}
+    </>
+  );
+
   // Count users by status
   const statusCounts = useMemo(() => {
     return {
@@ -316,7 +387,7 @@ const UserManagement: React.FC = () => {
           <div className="relative min-w-[200px] flex-1 md:w-64">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-paper-dim" />
             <Input
-              placeholder="Search by name, email…"
+              placeholder={canViewSensitive ? "Search by name, email…" : "Search by name…"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-9 rounded-xs border-ink-500 bg-ink-200 pl-9 font-mono text-[12px] text-paper placeholder:text-paper-faint focus-visible:border-brand focus-visible:ring-0"
@@ -373,6 +444,35 @@ const UserManagement: React.FC = () => {
               Clear
             </Button>
           )}
+
+          {/* View toggle: cards ⇄ list */}
+          <div role="radiogroup" aria-label="View layout" className="inline-flex overflow-hidden rounded-xs border border-ink-500">
+            {([
+              { value: "card" as UserManagementViewMode, icon: LayoutGrid, label: "Card view" },
+              { value: "list" as UserManagementViewMode, icon: Rows3, label: "List view" },
+            ]).map((v, idx) => {
+              const active = viewMode === v.value;
+              const Icon = v.icon;
+              return (
+                <button
+                  key={v.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={v.label}
+                  onClick={() => changeViewMode(v.value)}
+                  className={cn(
+                    "grid h-9 w-9 place-items-center transition-colors",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset",
+                    idx > 0 && "border-l border-ink-500",
+                    active ? "bg-brand text-ink-50" : "bg-ink-100 text-paper-muted hover:bg-ink-200 hover:text-paper",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              );
+            })}
+          </div>
 
           <Button
             variant="outline"
@@ -457,133 +557,257 @@ const UserManagement: React.FC = () => {
       {/* User Cards */}
       {!isLoading && !error && (
         <>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {users.map((user) => {
-              const isCurrentUser = user.id === currentUser?.id;
-              const userIsSuperAdmin = user.roles.includes('super_admin');
-              // Basic admins cannot edit super admins
-              const canEditThisUser = canUpdateUsers && (isSuperAdmin() || !userIsSuperAdmin);
-              // Reset password is only meaningful for password-based users — SSO
-              // accounts have no usable local password.
-              const canResetPassword = canEditThisUser && !user.hasSsoIdentity;
-              // Deactivation replaces deletion; you can't deactivate yourself.
-              const canToggleActive = canEditThisUser && !isCurrentUser;
-              const hasActions = canResetPassword || canToggleActive;
+          {/* Card view */}
+          {users.length > 0 && viewMode === "card" && (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {users.map((user) => {
+                const perms = getUserPerms(user);
 
-              return (
-                <div
-                  key={user.id}
-                  className="group relative rounded-xs border border-ink-500 bg-ink-100 p-5 transition-colors hover:border-ink-700 hover:bg-ink-200"
-                >
-                  {/* Status indicator */}
-                  <span
-                    className={`absolute right-4 top-4 h-1.5 w-1.5 rounded-full ${user.isActive ? "bg-emerald-400" : "bg-paper-faint"}`}
-                    title={user.isActive ? "Active" : "Inactive"}
-                  />
+                return (
+                  <div
+                    key={user.id}
+                    className="group relative rounded-xs border border-ink-500 bg-ink-100 p-5 transition-colors hover:border-ink-700 hover:bg-ink-200"
+                  >
+                    {/* Status indicator */}
+                    <span
+                      className={`absolute right-4 top-4 h-1.5 w-1.5 rounded-full ${user.isActive ? "bg-emerald-400" : "bg-paper-faint"}`}
+                      title={user.isActive ? "Active" : "Inactive"}
+                    />
 
-                  {/* User Avatar & Name */}
-                  <div className="mb-4 flex items-start gap-3">
-                    <div className="grid h-10 w-10 place-items-center rounded-xs border border-ink-500 bg-ink-200 font-mono text-[13px] font-semibold uppercase tracking-tight text-paper">
-                      {user.displayName?.slice(0, 2) || user.username.slice(0, 2)}
+                    {/* User Avatar & Name */}
+                    <div className="mb-4 flex items-start gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-xs border border-ink-500 bg-ink-200 font-mono text-[13px] font-semibold uppercase tracking-tight text-paper">
+                        {user.displayName?.slice(0, 2) || user.username.slice(0, 2)}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate text-[15px] font-semibold tracking-tight text-paper">
+                          {user.displayName || user.username}
+                          {perms.isCurrentUser && (
+                            <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em] text-brand">(You)</span>
+                          )}
+                        </h3>
+                        <p className="truncate font-mono text-[11px] text-paper-faint">@{user.username}</p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-[15px] font-semibold tracking-tight text-paper">
-                        {user.displayName || user.username}
-                        {isCurrentUser && (
-                          <span className="ml-2 font-mono text-[10px] uppercase tracking-[0.14em] text-brand">(You)</span>
+
+                    {/* User Details. Email + last-login are PII — hidden from
+                        view-only users. Auth method is shown to everyone. */}
+                    <div className="space-y-2">
+                      {canViewSensitive && (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3 w-3 shrink-0 text-paper-dim" aria-hidden />
+                            <span className="truncate text-[12px] text-paper-muted">{user.email}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3 w-3 shrink-0 text-paper-dim" aria-hidden />
+                            <span className="font-mono text-[11px] text-paper-faint">
+                              {user.lastLoginAt
+                                ? `Last login ${formatDistanceToNow(new Date(user.lastLoginAt), { addSuffix: true })}`
+                                : "Never logged in"}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                      <div className="flex items-center gap-2">
+                        {user.hasSsoIdentity ? (
+                          <ShieldCheck className="h-3 w-3 shrink-0 text-paper-dim" aria-hidden />
+                        ) : (
+                          <KeyRound className="h-3 w-3 shrink-0 text-paper-dim" aria-hidden />
                         )}
-                      </h3>
-                      <p className="truncate font-mono text-[11px] text-paper-faint">@{user.username}</p>
-                    </div>
-                  </div>
-
-                  {/* User Details */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-3 w-3 shrink-0 text-paper-dim" aria-hidden />
-                      <span className="truncate text-[12px] text-paper-muted">{user.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-3 w-3 shrink-0 text-paper-dim" aria-hidden />
-                      <span className="font-mono text-[11px] text-paper-faint">
-                        {user.lastLoginAt
-                          ? `Last login ${formatDistanceToNow(new Date(user.lastLoginAt), { addSuffix: true })}`
-                          : "Never logged in"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Role badges */}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {user.roles.map((role) => {
-                      const display = getRoleDisplay(role);
-                      return (
-                        <span
-                          key={role}
-                          className="inline-flex items-center gap-1 rounded-xs border border-ink-500 bg-ink-200 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-muted"
-                        >
-                          <span className="text-paper-faint">{display.code}</span>
-                          <span>{display.displayName}</span>
+                        <span className="font-mono text-[11px] text-paper-faint">
+                          {user.hasSsoIdentity ? "SSO sign-in" : "Password sign-in"}
                         </span>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    </div>
 
-                  {/* Quick Actions */}
-                  <div className="mt-4 flex gap-2 border-t border-ink-500 pt-4">
-                    {canEditThisUser && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="flex-1 rounded-xs font-mono text-[11px] uppercase tracking-[0.14em] text-paper-muted hover:bg-ink-200 hover:text-paper"
-                        onClick={() => navigate(`/admin/users/edit/${user.id}`)}
-                      >
-                        <Edit className="mr-1 h-3 w-3" />
-                        Edit
-                      </Button>
-                    )}
-                    {hasActions && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="ghost" className="rounded-xs px-2 text-paper-dim hover:bg-ink-200 hover:text-paper">
-                            <MoreVertical className="h-3.5 w-3.5" />
+                    {/* Role badges */}
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {user.roles.map((role) => {
+                        const display = getRoleDisplay(role);
+                        return (
+                          <span
+                            key={role}
+                            className="inline-flex items-center gap-1 rounded-xs border border-ink-500 bg-ink-200 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-paper-muted"
+                          >
+                            <span className="text-paper-faint">{display.code}</span>
+                            <span>{display.displayName}</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {/* Quick Actions */}
+                    {(perms.canEditThisUser || perms.hasActions) && (
+                      <div className="mt-4 flex gap-2 border-t border-ink-500 pt-4">
+                        {perms.canEditThisUser && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="flex-1 rounded-xs font-mono text-[11px] uppercase tracking-[0.14em] text-paper-muted hover:bg-ink-200 hover:text-paper"
+                            onClick={() => navigate(`/admin/users/edit/${user.id}`)}
+                          >
+                            <Edit className="mr-1 h-3 w-3" />
+                            Edit
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="rounded-xs border-ink-500 bg-ink-100 text-paper">
-                          {canResetPassword && (
-                            <DropdownMenuItem onClick={() => openResetPasswordDialog(user)} className="cursor-pointer focus:bg-ink-200">
-                              <Key className="mr-2 h-3.5 w-3.5" />
-                              Reset password
-                            </DropdownMenuItem>
-                          )}
-                          {canResetPassword && canToggleActive && <DropdownMenuSeparator className="bg-ink-500" />}
-                          {canToggleActive && (
-                            user.isActive ? (
-                              <DropdownMenuItem
-                                className="cursor-pointer text-amber-400 hover:bg-amber-950/40 focus:bg-amber-950/40 focus:text-amber-300"
-                                onClick={() => openToggleActiveDialog(user)}
-                              >
-                                <UserX className="mr-2 h-3.5 w-3.5" />
-                                Deactivate user
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem
-                                className="cursor-pointer text-emerald-400 hover:bg-emerald-950/40 focus:bg-emerald-950/40 focus:text-emerald-300"
-                                onClick={() => openToggleActiveDialog(user)}
-                              >
-                                <UserCheck className="mr-2 h-3.5 w-3.5" />
-                                Activate user
-                              </DropdownMenuItem>
-                            )
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        )}
+                        {perms.hasActions && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="sm" variant="ghost" className="rounded-xs px-2 text-paper-dim hover:bg-ink-200 hover:text-paper">
+                                <MoreVertical className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="rounded-xs border-ink-500 bg-ink-100 text-paper">
+                              {renderUserMenuItems(user, perms)}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* List view — dense, scannable table for quick analysis */}
+          {users.length > 0 && viewMode === "list" && (
+            <div className="overflow-x-auto rounded-xs border border-ink-500">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-ink-500 bg-ink-200/40">
+                    <th className={TH_CLS}>User</th>
+                    {canViewSensitive && <th className={TH_CLS}>Email</th>}
+                    <th className={TH_CLS}>Auth</th>
+                    <th className={TH_CLS}>Roles</th>
+                    <th className={TH_CLS}>Status</th>
+                    {canViewSensitive && <th className={TH_CLS}>Last login</th>}
+                    <th className={`${TH_CLS} text-right`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => {
+                    const perms = getUserPerms(user);
+                    return (
+                      <tr key={user.id} className="border-b border-ink-500/60 transition-colors hover:bg-ink-200/50">
+                        {/* User */}
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xs border border-ink-500 bg-ink-200 font-mono text-[11px] font-semibold uppercase tracking-tight text-paper">
+                              {user.displayName?.slice(0, 2) || user.username.slice(0, 2)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate text-[13px] font-medium tracking-tight text-paper">
+                                  {user.displayName || user.username}
+                                </span>
+                                {perms.isCurrentUser && (
+                                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-brand">(You)</span>
+                                )}
+                              </div>
+                              <span className="truncate font-mono text-[10px] text-paper-faint">@{user.username}</span>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Email (PII) */}
+                        {canViewSensitive && (
+                          <td className="px-4 py-2.5">
+                            <span className="font-mono text-[11px] text-paper-muted">{user.email}</span>
+                          </td>
+                        )}
+
+                        {/* Auth */}
+                        <td className="px-4 py-2.5">
+                          <span className="inline-flex items-center gap-1 rounded-xs border border-ink-500 bg-ink-200 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-paper-muted">
+                            {user.hasSsoIdentity ? <ShieldCheck className="h-2.5 w-2.5" /> : <KeyRound className="h-2.5 w-2.5" />}
+                            {user.hasSsoIdentity ? "SSO" : "Password"}
+                          </span>
+                        </td>
+
+                        {/* Roles */}
+                        <td className="px-4 py-2.5">
+                          <div className="flex flex-wrap gap-1">
+                            {user.roles.length === 0 ? (
+                              <span className="text-[12px] text-paper-faint">—</span>
+                            ) : (
+                              user.roles.map((role) => {
+                                const display = getRoleDisplay(role);
+                                return (
+                                  <span
+                                    key={role}
+                                    className="inline-flex items-center gap-1 rounded-xs border border-ink-500 bg-ink-200 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-paper-muted"
+                                    title={display.displayName}
+                                  >
+                                    <span className="text-paper-faint">{display.code}</span>
+                                    <span>{display.displayName}</span>
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-4 py-2.5">
+                          <span className="inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em]">
+                            <span className={`h-1.5 w-1.5 rounded-full ${user.isActive ? "bg-emerald-400" : "bg-paper-faint"}`} />
+                            <span className={user.isActive ? "text-emerald-300" : "text-paper-faint"}>
+                              {user.isActive ? "Active" : "Inactive"}
+                            </span>
+                          </span>
+                        </td>
+
+                        {/* Last login (PII) */}
+                        {canViewSensitive && (
+                          <td className="px-4 py-2.5">
+                            <span className={cn("font-mono text-[11px]", user.lastLoginAt ? "text-paper-muted" : "text-paper-faint")}>
+                              {user.lastLoginAt
+                                ? formatDistanceToNow(new Date(user.lastLoginAt), { addSuffix: true })
+                                : "Never"}
+                            </span>
+                          </td>
+                        )}
+
+                        {/* Actions */}
+                        <td className="px-4 py-2.5 text-right">
+                          <div className="flex justify-end gap-1">
+                            {perms.canEditThisUser && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 rounded-xs text-paper-dim hover:bg-ink-200 hover:text-paper"
+                                onClick={() => navigate(`/admin/users/edit/${user.id}`)}
+                                aria-label={`Edit ${user.username}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {perms.hasActions && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 rounded-xs text-paper-dim hover:bg-ink-200 hover:text-paper" aria-label="More actions">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="rounded-xs border-ink-500 bg-ink-100 text-paper">
+                                  {renderUserMenuItems(user, perms)}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                            {!perms.canEditThisUser && !perms.hasActions && (
+                              <span className="font-mono text-[11px] text-paper-faint">—</span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Empty State */}
           {users.length === 0 && (

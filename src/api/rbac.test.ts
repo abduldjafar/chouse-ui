@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { ssoApi, rbacDataAccessPoliciesApi, rbacUsersApi, rbacSsoAdminApi } from './rbac';
+import { ssoApi, authConfigApi, rbacDataAccessPoliciesApi, rbacUsersApi, rbacSsoAdminApi } from './rbac';
 import { RBAC_ACCESS_TOKEN_KEY, RBAC_REFRESH_TOKEN_KEY } from './client';
 import { server } from '../test/mocks/server';
 import { http, HttpResponse } from 'msw';
@@ -91,6 +91,43 @@ describe('ssoApi.getProviders', () => {
       name: 'ApiError',
       message: 'SSO not configured',
       statusCode: 503,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authConfigApi.get
+// ---------------------------------------------------------------------------
+
+describe('authConfigApi.get', () => {
+  it('returns passwordLoginEnabled from a 200 response', async () => {
+    server.use(
+      http.get('/api/rbac/auth/config', () => {
+        return HttpResponse.json({
+          success: true,
+          data: { passwordLoginEnabled: false },
+        });
+      })
+    );
+
+    const config = await authConfigApi.get();
+    expect(config).toEqual({ passwordLoginEnabled: false });
+  });
+
+  it('throws ApiError with the server message on non-OK response', async () => {
+    server.use(
+      http.get('/api/rbac/auth/config', () => {
+        return HttpResponse.json(
+          { success: false, error: { message: 'boom', code: 'INTERNAL' } },
+          { status: 500 }
+        );
+      })
+    );
+
+    await expect(authConfigApi.get()).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'boom',
+      statusCode: 500,
     });
   });
 });

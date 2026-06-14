@@ -9,11 +9,14 @@ import { rbacUserPreferencesApi } from '@/api/rbac';
 import { useRbacStore } from '@/stores/rbac';
 import { log } from '@/lib/log';
 
+export type UserManagementViewMode = 'card' | 'list';
+
 export interface UserManagementPreferences {
   defaultPageSize?: number;
   defaultSearchQuery?: string;
   defaultRoleFilter?: string;
   defaultStatusFilter?: string;
+  defaultViewMode?: UserManagementViewMode;
 }
 
 const DEFAULT_USER_MGMT_PREFERENCES: Required<UserManagementPreferences> = {
@@ -21,6 +24,7 @@ const DEFAULT_USER_MGMT_PREFERENCES: Required<UserManagementPreferences> = {
   defaultSearchQuery: '',
   defaultRoleFilter: 'all',
   defaultStatusFilter: 'all',
+  defaultViewMode: 'card',
 };
 
 /**

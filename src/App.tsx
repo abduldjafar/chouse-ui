@@ -23,6 +23,11 @@ import { AdminRoute } from "@/features/admin/routes/adminRoute";
 import CreateUser from "@/features/admin/components/CreateUser";
 import EditUser from "@/features/admin/components/EditUser";
 import { RBAC_PERMISSIONS } from "@/stores/rbac";
+import {
+  ADMIN_ACCESS_PERMISSIONS,
+  MONITORING_ACCESS_PERMISSIONS,
+  EXPLORER_ACCESS_PERMISSIONS,
+} from "@/lib/navAccess";
 import { PageTitleUpdater } from "@/components/common/PageTitleUpdater";
 import { api, rbacConnectionsApi } from "@/api";
 import { useAuthStore } from "@/stores/auth";
@@ -189,18 +194,7 @@ export default function App() {
               <Route
                 path="/monitoring/:tab?"
                 element={
-                  <AdminRoute
-                    requiredPermission={[
-                      RBAC_PERMISSIONS.LIVE_QUERIES_VIEW,
-                      RBAC_PERMISSIONS.METRICS_VIEW,
-                      RBAC_PERMISSIONS.METRICS_VIEW_ADVANCED,
-                      RBAC_PERMISSIONS.LOGS_VIEW,
-                      RBAC_PERMISSIONS.PARTS_VIEW,
-                      RBAC_PERMISSIONS.SCHEMA_ADVISOR_VIEW,
-                      RBAC_PERMISSIONS.CLUSTER_VIEW,
-                      RBAC_PERMISSIONS.ERRORS_VIEW,
-                    ]}
-                  >
+                  <AdminRoute requiredPermission={MONITORING_ACCESS_PERMISSIONS}>
                     <MonitoringPage />
                   </AdminRoute>
                 }
@@ -214,12 +208,7 @@ export default function App() {
               <Route
                 path="/explorer"
                 element={
-                  <AdminRoute
-                    requiredPermission={[
-                      RBAC_PERMISSIONS.DB_VIEW,
-                      RBAC_PERMISSIONS.TABLE_VIEW,
-                    ]}
-                  >
+                  <AdminRoute requiredPermission={EXPLORER_ACCESS_PERMISSIONS}>
                     <ExplorerPage />
                   </AdminRoute>
                 }
@@ -229,14 +218,7 @@ export default function App() {
               <Route
                 path="/admin/:tab?"
                 element={
-                  <AdminRoute
-                    requiredPermission={[
-                      RBAC_PERMISSIONS.USERS_VIEW,
-                      RBAC_PERMISSIONS.USERS_CREATE,
-                      RBAC_PERMISSIONS.ROLES_VIEW,
-                      RBAC_PERMISSIONS.AUDIT_VIEW,
-                    ]}
-                  >
+                  <AdminRoute requiredPermission={ADMIN_ACCESS_PERMISSIONS}>
                     <Admin />
                   </AdminRoute>
                 }
