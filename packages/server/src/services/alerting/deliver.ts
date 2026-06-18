@@ -36,13 +36,44 @@ export async function sendChannelTest(
     case ChannelType.Slack: {
       const url = String(config.webhookUrl ?? "");
       if (!url) throw new Error("Slack webhook URL is not set");
-      await postJson(url, { text: `${TEST_TITLE}\n${TEST_TEXT}` });
+      // Mirror the REAL breach payload shape (Block Kit `attachments`), not a
+      // bare `{text}`. A bare text body is accepted by both Slack AND Google
+      // Chat, so it silently passes for a channel that's typed Slack but points
+      // at a Google Chat webhook — then real alerts (which DO send `attachments`)
+      // get rejected 400 by Google Chat. Sending the real shape here makes the
+      // test fail for that mismatch, instead of giving false confidence.
+      await postJson(url, {
+        text: `${TEST_TITLE}\n${TEST_TEXT}`,
+        attachments: [
+          {
+            color: "#16a34a",
+            blocks: [
+              { type: "header", text: { type: "plain_text", text: TEST_TITLE, emoji: true } },
+              { type: "section", text: { type: "mrkdwn", text: TEST_TEXT } },
+            ],
+          },
+        ],
+      });
       return true;
     }
     case ChannelType.GoogleChat: {
       const url = String(config.webhookUrl ?? "");
       if (!url) throw new Error("Google Chat webhook URL is not set");
-      await postJson(url, { text: `${TEST_TITLE}\n${TEST_TEXT}` });
+      // Mirror the REAL breach payload shape (`cardsV2`). Same reasoning as
+      // Slack above — a bare `{text}` would pass even against a Slack webhook,
+      // masking a type/URL mismatch. The card forces a faithful round-trip.
+      await postJson(url, {
+        text: TEST_TITLE,
+        cardsV2: [
+          {
+            cardId: "alerting-test",
+            card: {
+              header: { title: TEST_TITLE },
+              sections: [{ widgets: [{ textParagraph: { text: TEST_TEXT } }] }],
+            },
+          },
+        ],
+      });
       return true;
     }
     case ChannelType.Webhook: {

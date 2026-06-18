@@ -9,7 +9,7 @@
 import React, { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Radio } from "lucide-react";
+import { Loader2, Radio, AlertTriangle } from "lucide-react";
 
 import { log } from "@/lib/log";
 import { Button } from "@/components/ui/button";
@@ -97,8 +97,32 @@ export function ChannelDialog({ open, channel, onClose }: ChannelDialogProps) {
 
   const onTypeChange = (next: ChannelType) => {
     setType(next);
-    setConfig(defaultConfigFor(CHANNEL_FIELD_SPECS[next]));
+    // Preserve values for keys shared between the old and new type — most
+    // importantly `webhookUrl`, shared by Slack & Google Chat. This lets an
+    // operator fix a mis-typed channel (e.g. a Google Chat webhook saved as
+    // Slack) by just flipping the type, without re-pasting the URL.
+    setConfig((prev) => {
+      const base = defaultConfigFor(CHANNEL_FIELD_SPECS[next]);
+      const nextKeys = new Set(CHANNEL_FIELD_SPECS[next].map((s) => s.key));
+      const carried: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (nextKeys.has(k) && v !== "" && v !== undefined && v !== null) carried[k] = v;
+      }
+      return { ...base, ...carried };
+    });
   };
+
+  // Guard against the silent-failure trap: a webhook URL whose domain clearly
+  // belongs to a DIFFERENT provider than the selected type. Sending Slack
+  // Block Kit to a Google Chat webhook (or vice versa) is rejected at delivery
+  // time but the bare-text "Send test" used to pass — so we block it up front.
+  const webhookUrl = typeof config.webhookUrl === "string" ? config.webhookUrl : "";
+  const urlTypeMismatch =
+    type === ChannelType.Slack && /chat\.googleapis\.com/i.test(webhookUrl)
+      ? "This looks like a Google Chat webhook URL, but the channel type is Slack. Switch the type to Google Chat — otherwise alerts go out in Slack format and Google Chat rejects them."
+      : type === ChannelType.GoogleChat && /hooks\.slack\.com/i.test(webhookUrl)
+        ? "This looks like a Slack webhook URL, but the channel type is Google Chat. Switch the type to Slack."
+        : null;
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -123,7 +147,7 @@ export function ChannelDialog({ open, channel, onClose }: ChannelDialogProps) {
     },
   });
 
-  const canSave = name.trim().length > 0 && !mutation.isPending;
+  const canSave = name.trim().length > 0 && !mutation.isPending && !urlTypeMismatch;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -152,7 +176,7 @@ export function ChannelDialog({ open, channel, onClose }: ChannelDialogProps) {
 
           <div className="space-y-1.5">
             <Label className={LABEL_CLASS}>Type</Label>
-            <Select value={type} onValueChange={(v) => onTypeChange(v as ChannelType)} disabled={isEdit}>
+            <Select value={type} onValueChange={(v) => onTypeChange(v as ChannelType)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -195,6 +219,13 @@ export function ChannelDialog({ open, channel, onClose }: ChannelDialogProps) {
               </div>
             );
           })}
+
+          {urlTypeMismatch && (
+            <div className="flex items-start gap-2 rounded-xs border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+              <span>{urlTypeMismatch}</span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between border-t border-ink-500 pt-3">
             <Label className={LABEL_CLASS}>Enabled</Label>
