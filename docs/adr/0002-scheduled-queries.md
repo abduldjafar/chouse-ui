@@ -93,6 +93,8 @@ it warrants an ADR before implementation.
 | Top-level nav entry (icon + label + permission gate) | `src/components/common/FloatingDock.tsx` (`navItems`, ~line 350) |
 | Nav permission gating pattern | `src/lib/navAccess.ts` (`MONITORING_ACCESS_PERMISSIONS` — add a parallel `DATAOPS_ACCESS_PERMISSIONS`) |
 | Page-with-sub-tabs pattern (`TabPill`, per-permission `availableTabs`) | `src/pages/Monitoring.tsx` (copy the pattern into the new `src/pages/DataOps.tsx`) |
+| **Multi-step wizard pattern** (create/edit) — `STEPS` array, `Dialog` shell, stepper header, per-step validation gating *Next*, final *Review* step, editing pre-fills | `src/features/admin/components/clickhouse/ClickHouseUserWizard.tsx` (and `ClickHouseRoleWizard.tsx`) |
+| **Design system** — shadcn/ui primitives + house Tailwind tokens (`ink-*` surfaces/borders, `paper`/`paper-muted`/`paper-faint` text, `rounded-xs`, mono-uppercase micro-labels) | `src/components/ui/*` (`button`, `dialog`, `card`, `tabs`, `select`, `input`, `switch`, `badge`, …); tokens as used across the wizards/alerting dialogs |
 | Saved-query CRUD + frontend feature/API layout | `packages/server/src/routes/saved-queries.ts`, `src/features/alerting/`, `src/api/alerting.ts` |
 
 Migration HEAD is **`1.39.1`**. This feature takes migration **`1.40.0`** (it ships
@@ -886,18 +888,8 @@ DataOps (top-level page)                                   /dataops
     failing job → its Runs drill-down.
   - **Jobs** — status-sorted list (failing floats up): name, connection, schedule,
     last-run verdict, next-run countdown; row actions Run-now / Edit / Disable / Delete;
-    `+ New job`. Opening one enters the **builder**: name + description, connection
-    picker, **Monaco SQL editor** (reuse the existing editor; show the `{{slot_start}}`/
-    `{{slot_end}}`/`{{prev_run_at}}` params and the `FINAL`/sequential-consistency
-    toggles), **schedule picker** (preset daily/weekly/monthly **or** a **Custom cron**
-    mode with a `cron_expr` input that validates inline and previews the **next N fire
-    times** via `croner`, D5a), the result-action section (alert-condition builder per D4
-    + export toggle + **Output section**: mode `none|append|replace|upsert`, destination
-    DB/table picker, `partitionExpr` for `replace`; on an existing table it shows the
-    column/engine compatibility check, and when the table is missing it offers
-    **Create-if-missing** (engine/orderBy/partitionBy inputs) with a **generated
-    `CREATE TABLE` DDL preview** — all gated behind `scheduled_queries:write`, D4a/D4b/D8),
-    channel multiselect, and a Run-now footer with a live preview of the result.
+    `+ New job`. Create **and** Edit open the **builder wizard** (D10a) — Edit pre-fills
+    every step from the existing job.
   - **Runs** — reverse-chronological feed of `scheduled_query_runs` (failed/errored
     shaded), showing trigger (`scheduled` vs `manual · user`), row count, duration, and
     condition outcome; filter by job and status. Expanding a run loads its bounded
@@ -909,6 +901,62 @@ DataOps (top-level page)                                   /dataops
 - **`GET /overview`** is read-only aggregation over existing tables (no new storage):
   KPIs, the daily trend series, and the streak ranking (consecutive `failed/error` runs
   per job).
+
+### D10a — Builder: a multi-step wizard (create & edit)
+
+Creating and editing a job both use a **multi-step wizard**, not one long form —
+**mirroring `src/features/admin/components/clickhouse/ClickHouseUserWizard.tsx`** (a
+`STEPS` array + `type Step`, a `Dialog` shell with a stepper in the header, per-step
+validation that gates **Next**, a final **Review** step, and Edit pre-filling every step).
+Reuse that pattern verbatim; do not invent a new wizard shell.
+
+Steps (each maps to the D-sections that define its rules):
+
+1. **Source** — name, description, connection picker, and the **Monaco SQL editor** (reuse
+   the existing editor) with the `{{slot_start}}`/`{{slot_end}}`/`{{prev_run_at}}` params
+   surfaced. Read-only validation + `{{…}}` token validation run here (D3/D3b); **Next** is
+   gated on a valid SELECT.
+2. **Schedule** — cadence picker: preset daily/weekly/monthly **or** a **Custom cron** mode
+   with a `cron_expr` input that validates inline and shows the **next N fire times** (via
+   the `POST /preview` endpoint, D9/D5a); plus the `FINAL` / sequential-consistency toggles
+   (D3a #3).
+3. **Actions** — alert-condition builder (D4) + export toggle + notification-channel
+   multiselect (reuse the alerting channel selector).
+4. **Output** *(conditional — shown only with `scheduled_queries:write`)* — `output_mode`
+   `none|append|replace|upsert`, destination DB/table picker, `partitionExpr` for `replace`;
+   live destination check via `POST /preview` (D4b/D4c): existing-table column/engine
+   compatibility, or **Create-if-missing** (engine/orderBy/partitionBy) with a generated
+   `CREATE TABLE` DDL preview; schema-drift surfaced inline. **Next** gated on a compatible
+   (or to-be-created) destination.
+5. **Review** — read-only summary of all steps + a **Run-now dry-run** (preview the result/
+   write plan without persisting) before **Save**.
+
+The wizard holds draft state locally (`useState` / a small Zustand slice); **Save** issues a
+single `POST`/`PATCH` (D9). Per-step validation reuses the same Zod schemas the server uses,
+so client and server agree.
+
+### D10b — Visual design: follow the existing house style (no bespoke styling)
+
+The whole DataOps surface must be visually indistinguishable from the rest of the app —
+**reuse the design system, do not introduce new fonts, spacing scales, or component
+styles:**
+
+- **Primitives:** build exclusively from `src/components/ui/*` (`Button`, `Dialog`, `Card`,
+  `Tabs`, `Select`, `Input`, `Textarea`, `Switch`, `Checkbox`, `Badge`, `Table`,
+  `ScrollArea`, …) — the same primitives the wizards and alerting dialogs use. No raw
+  `<button>`/`<input>` with ad-hoc classes.
+- **Tokens:** use the house Tailwind tokens already in those components — `ink-*` for
+  surfaces/borders, `paper`/`paper-muted`/`paper-faint` for text, `rounded-xs` corners, and
+  the mono-uppercase micro-label treatment (`font-mono text-[10px] uppercase tracking-…`)
+  for section/step labels. Match type sizes/weights to the wizard (`text-[16px]
+  font-semibold` titles, `text-[12px]` body) rather than picking new sizes.
+- **Layout parity:** the `TabPill` bars (feature + sub-tabs), the Jobs/Runs lists, and the
+  Overview KPI cards should look and space like Monitoring's tabs and the alerting
+  list/cards. Tables use the shared `data-table`/`Table` styling; AG Grid (Runs snapshot)
+  follows the theme already used in the workspace results grid.
+- **States:** loading = the shared `Skeleton`/`multi-step-loader`; empty/error states reuse
+  the existing empty-state and `toast.error()` patterns; icons from the same `lucide-react`
+  set/size conventions as the rest of the app.
 
 ### D11 — Deployment topology (single-node and multi-replica K8s)
 
@@ -1085,9 +1133,11 @@ required):
 6. Frontend: new top-level **`DataOps`** page (`src/pages/DataOps.tsx` with a feature-tab
    bar + `/dataops/:feature?/:sub?` route in `App.tsx` + `navItems` entry in
    `FloatingDock.tsx` + `DATAOPS_ACCESS_PERMISSIONS` in `navAccess.ts`), then
-   `src/features/scheduled-queries/` as its first **feature tab** with its own Overview /
-   Jobs (builder incl. the write-gated **Output section**: mode + destination +
-   `partitionExpr`) / Runs sub-tabs; "Schedule this query" editor entry point (D10).
+   `src/features/scheduled-queries/` as its first **feature tab** with Overview / Jobs / Runs
+   sub-tabs. Create/Edit use a **multi-step wizard** (D10a) mirroring `ClickHouseUserWizard.tsx`
+   (Source → Schedule → Actions → Output[write-gated] → Review). Build **only** from
+   `src/components/ui/*` + house Tailwind tokens — no bespoke styling (D10b). Add the
+   "Schedule this query" editor entry point (D10).
 7. HA startup guardrail (SQLite + `CHOUSE_HA` → warning) (D11).
 8. Changelog fragment `changelogs/unreleased/<pr>-scheduled-queries.md` (`type: minor`).
 9. Lint, typecheck, `bunx vitest run`, `./scripts/test-isolated-server.sh`,
