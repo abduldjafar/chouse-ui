@@ -398,6 +398,26 @@ export const handlers = [
   http.delete(`${API_BASE}/scheduled-queries/:id`, () => {
     return HttpResponse.json({ success: true, data: { success: true } });
   }),
+  http.get(`${API_BASE}/scheduled-queries/:id/lineage`, ({ params }) => {
+    return HttpResponse.json({
+      success: true,
+      data: {
+        focusJobId: params.id,
+        connectionId: 'conn-1',
+        windowDays: 14,
+        observedAt: 1700000000000,
+        nodes: [
+          { id: `job:${params.id}`, kind: 'job', label: 'job', jobId: params.id, outputMode: 'append', focus: true, runCount: 3, lastSeen: 1700000000000 },
+          { id: 'table:db.src', kind: 'table', label: 'db.src', database: 'db', table: 'src', columns: ['a', 'b'], produced: false },
+          { id: 'table:db.out', kind: 'table', label: 'db.out', database: 'db', table: 'out', columns: ['a'], produced: true },
+        ],
+        edges: [
+          { id: 'read:db.src->x', from: 'table:db.src', to: `job:${params.id}`, kind: 'read', columns: ['a', 'b'] },
+          { id: 'write:x->db.out', from: `job:${params.id}`, to: 'table:db.out', kind: 'write', columns: ['a'] },
+        ],
+      },
+    });
+  }),
 
   // Default 404
   http.all('*', ({ request }) => {

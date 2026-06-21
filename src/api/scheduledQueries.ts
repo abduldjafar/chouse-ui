@@ -204,3 +204,50 @@ export async function getOverview(windowDays = 14): Promise<Overview> {
 export async function previewScheduledQuery(input: Partial<ScheduledQueryInput>): Promise<PreviewResult> {
   return api.post<PreviewResult>("/scheduled-queries/preview", input);
 }
+
+// --- lineage (observed runtime) ---------------------------------------------
+
+export interface LineageTableNode {
+  id: string;
+  kind: "table";
+  label: string;
+  database: string;
+  table: string;
+  columns: string[];
+  produced: boolean;
+}
+
+export interface LineageJobNode {
+  id: string;
+  kind: "job";
+  label: string;
+  jobId: string;
+  outputMode: SqOutputMode;
+  focus: boolean;
+  runCount: number;
+  lastSeen: number | null;
+}
+
+export type LineageNode = LineageTableNode | LineageJobNode;
+
+export interface LineageEdge {
+  id: string;
+  from: string;
+  to: string;
+  kind: "read" | "write";
+  columns: string[];
+}
+
+export interface LineageGraph {
+  focusJobId: string;
+  connectionId: string;
+  windowDays: number;
+  observedAt: number;
+  nodes: LineageNode[];
+  edges: LineageEdge[];
+  note?: string;
+}
+
+export async function getLineage(id: string, windowDays = 14): Promise<LineageGraph> {
+  return api.get<LineageGraph>(`/scheduled-queries/${id}/lineage?window=${windowDays}d`);
+}

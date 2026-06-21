@@ -107,7 +107,11 @@ export class ScheduledQueryScheduler {
     try {
       const job = await store.getJob(jobId);
       if (!job) return;
-      const client = await clientForConnection(job.connectionId);
+      // Attribute the reaper's KILL to the job OWNER in query_log (not the bare
+      // ClickHouse user). A distinct `source` keeps the KILL's own query_id from
+      // being counted as a run by the lineage observation query.
+      const logComment = JSON.stringify({ rbac_user_id: job.createdBy ?? null, source: "scheduled_query_kill", job_id: job.id });
+      const client = await clientForConnection(job.connectionId, logComment);
       await client.command({ query: `KILL QUERY WHERE query_id = {qid:String}`, query_params: { qid: runId } });
     } catch {
       /* best-effort */

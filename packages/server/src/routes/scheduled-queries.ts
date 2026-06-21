@@ -39,6 +39,7 @@ import {
   buildCreateTableDDL,
 } from "../services/scheduledQueries/materialize";
 import { buildExecutableQuery, toDateTime64Param } from "../services/scheduledQueries/validation";
+import { buildLineage, clampWindowDays } from "../services/scheduledQueries/lineage";
 
 const scheduledQueries = new Hono();
 
@@ -359,6 +360,18 @@ scheduledQueries.delete("/:id/runs", requirePermission(PERMISSIONS.SCHEDULED_QUE
   return ok(c, { deleted });
 });
 
+// --- lineage (observed runtime) ---------------------------------------------
+
+scheduledQueries.get("/:id/lineage", requirePermission(PERMISSIONS.SCHEDULED_QUERIES_VIEW), async (c) => {
+  const focusJob = await loadVisibleJob(c, c.req.param("id"));
+  const windowParam = c.req.query("window") ?? "14d";
+  const windowDays = clampWindowDays(parseInt(windowParam, 10) || 14);
+  // Only jobs the caller may see feed the cross-job chain (respects view_all).
+  const visibleJobs = await store.listJobs(ownerScope(c));
+  const graph = await buildLineage(focusJob, visibleJobs, windowDays, userId(c) ?? null);
+  return ok(c, graph);
+});
+
 // --- preview (builder helper) -----------------------------------------------
 
 scheduledQueries.post(
@@ -402,7 +415,13 @@ scheduledQueries.post(
       if (!hasWritePerm(c)) throw AppError.forbidden("Materialize preview requires scheduled_queries:write");
       try {
         await assertConnectionAccess(c, body.connectionId);
-        const client = await clientForConnection(body.connectionId);
+        // Attribute the preview's DESCRIBE / destination reads to the RBAC user
+        // in query_log (not the bare ClickHouse user). A distinct `source` keeps
+        // these draft reads from being mistaken for job runs by lineage.
+        const client = await clientForConnection(
+          body.connectionId,
+          JSON.stringify({ rbac_user_id: userId(c) ?? null, source: "scheduled_query_preview" }),
+        );
         const now = Date.now();
         const { sql: execSql } = buildExecutableQuery(body.query);
         const params = {

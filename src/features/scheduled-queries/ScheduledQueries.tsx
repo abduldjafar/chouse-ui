@@ -6,24 +6,26 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, ListChecks, History } from "lucide-react";
+import { LayoutDashboard, ListChecks, History, Network } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { DataControls } from "@/components/common/DataControls";
 import { OverviewTab } from "./OverviewTab";
 import { JobsTab } from "./JobsTab";
 import { RunsTab } from "./RunsTab";
+import { LineageTab } from "./LineageTab";
 import { sqKeys } from "./hooks";
 
 const AUTO_REFRESH_MS = 30_000;
 
-export type SubTab = "overview" | "jobs" | "runs";
-export const SUB_TABS: SubTab[] = ["overview", "jobs", "runs"];
+export type SubTab = "overview" | "jobs" | "runs" | "lineage";
+export const SUB_TABS: SubTab[] = ["overview", "jobs", "runs", "lineage"];
 
 const TAB_META: Record<SubTab, { label: string; icon: React.ElementType }> = {
   overview: { label: "Overview", icon: LayoutDashboard },
   jobs: { label: "Jobs", icon: ListChecks },
   runs: { label: "Runs", icon: History },
+  lineage: { label: "Lineage", icon: Network },
 };
 
 function SubTabPill({ tab, isActive, onClick }: { tab: SubTab; isActive: boolean; onClick: () => void }) {
@@ -104,6 +106,7 @@ export function ScheduledQueries({ sub, onSubChange }: ScheduledQueriesProps) {
         {sub === "overview" && <OverviewTab onSelectJob={drillToRuns} />}
         {sub === "jobs" && <JobsTab onSelectJob={drillToRuns} />}
         {sub === "runs" && <RunsTab selectedJobId={drillJobId} />}
+        {sub === "lineage" && <LineageTab />}
       </div>
     </div>
   );

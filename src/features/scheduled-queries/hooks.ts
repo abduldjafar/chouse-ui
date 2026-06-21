@@ -11,6 +11,7 @@ import {
   createScheduledQuery,
   deleteRuns,
   deleteScheduledQuery,
+  getLineage,
   getOverview,
   listRuns,
   listScheduledQueries,
@@ -28,6 +29,7 @@ export const sqKeys = {
   overview: (windowDays: number) => [...sqKeys.all, "overview", windowDays] as const,
   runs: (id: string, status?: SqStatus, from?: number, to?: number) =>
     [...sqKeys.all, "runs", id, status ?? "all", from ?? 0, to ?? 0] as const,
+  lineage: (id: string, windowDays: number) => [...sqKeys.all, "lineage", id, windowDays] as const,
 };
 
 export function useScheduledQueries() {
@@ -46,6 +48,14 @@ export function useScheduledQueryRuns(
   return useQuery({
     queryKey: sqKeys.runs(id, opts.status, opts.from, opts.to),
     queryFn: () => listRuns(id, { limit: 200, status: opts.status, from: opts.from, to: opts.to }),
+    enabled: enabled && Boolean(id),
+  });
+}
+
+export function useScheduledQueryLineage(id: string, windowDays = 14, enabled = true) {
+  return useQuery({
+    queryKey: sqKeys.lineage(id, windowDays),
+    queryFn: () => getLineage(id, windowDays),
     enabled: enabled && Boolean(id),
   });
 }

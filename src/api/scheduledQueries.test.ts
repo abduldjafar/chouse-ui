@@ -13,6 +13,7 @@ import {
   listRuns,
   createScheduledQuery,
   deleteScheduledQuery,
+  getLineage,
   type ScheduledQueryInput,
 } from "./scheduledQueries";
 
@@ -81,5 +82,16 @@ describe("Scheduled Queries API", () => {
 
   it("deletes a job without throwing", async () => {
     await expect(deleteScheduledQuery("sq-1")).resolves.toBeUndefined();
+  });
+
+  it("fetches the observed-runtime lineage graph for a job", async () => {
+    const graph = await getLineage("sq-1", 14);
+    expect(graph.focusJobId).toBe("sq-1");
+    expect(graph.windowDays).toBe(14);
+    expect(graph.nodes).toHaveLength(3);
+    const write = graph.edges.find((e) => e.kind === "write");
+    expect(write?.from).toBe("job:sq-1");
+    expect(write?.to).toBe("table:db.out");
+    expect(write?.columns).toEqual(["a"]);
   });
 });
