@@ -1,6 +1,6 @@
 # 0002 — Scheduled Queries (a scheduled-execution backbone for CHouse UI)
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-20
 - **Deciders:** CHouse UI maintainers
 - **Tags:** scheduling, clickhouse, rbac, alerting, ui, deployment, backbone
