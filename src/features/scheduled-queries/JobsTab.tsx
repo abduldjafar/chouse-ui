@@ -1,5 +1,5 @@
 /**
- * Scheduled Queries → Jobs: an Airflow-style filterable, paginated job list.
+ * Scheduled Queries → Jobs: a filterable, paginated job list.
  * Filter by enabled/disabled, last-run state, and a name search; Run-now / Edit /
  * Disable / Delete row actions; "+ New job" opens the builder wizard.
  */
@@ -95,7 +95,7 @@ export function JobsTab({ onSelectJob }: { onSelectJob: (id: string) => void }) 
   const [editing, setEditing] = useState<ScheduledQuery | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<ScheduledQuery | undefined>();
 
-  // Filters (Airflow-style).
+  // Filters.
   const [search, setSearch] = useState("");
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilter>("all");
   const [stateFilter, setStateFilter] = useState<StateFilter>("all");

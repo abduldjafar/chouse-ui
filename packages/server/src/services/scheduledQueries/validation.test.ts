@@ -68,6 +68,35 @@ describe("buildExecutableQuery", () => {
   });
 });
 
+describe("window macros", () => {
+  it("accepts offset and extract macros", () => {
+    expect(validateReadOnlySelect("SELECT 1 WHERE t >= {{slot_start - 1d}} AND t < {{slot_end + 2h}}").ok).toBe(true);
+    expect(validateReadOnlySelect("SELECT toYYYYMMDD(t) = {{slot_start | yyyymmdd}} FROM e").ok).toBe(true);
+    expect(validateReadOnlySelect("SELECT 1 FROM e WHERE d = {{slot_end - 1mo | date}}").ok).toBe(true);
+  });
+
+  it("rejects unknown units and formats (fail closed)", () => {
+    expect(validateReadOnlySelect("SELECT 1 WHERE t >= {{slot_start - 1x}}").ok).toBe(false);
+    expect(validateReadOnlySelect("SELECT 1 WHERE t >= {{slot_start | bogus}}").ok).toBe(false);
+    expect(validateReadOnlySelect("SELECT 1 WHERE t >= {{slot_start garbage}}").ok).toBe(false);
+  });
+
+  it("compiles offsets to INTERVAL arithmetic", () => {
+    const { sql } = buildExecutableQuery("SELECT 1 WHERE t >= {{slot_start - 1d}}");
+    expect(sql).toContain("({sq_slot_start:DateTime64(3, 'UTC')} - INTERVAL 1 DAY)");
+  });
+
+  it("compiles extract functions and chained offset+extract", () => {
+    expect(buildExecutableQuery("SELECT {{slot_start | yyyymm}}").sql).toContain("toYYYYMM({sq_slot_start:DateTime64(3, 'UTC')})");
+    const chained = buildExecutableQuery("SELECT {{slot_end - 1mo | date}}").sql;
+    expect(chained).toContain("toDate(({sq_slot_end:DateTime64(3, 'UTC')} - INTERVAL 1 MONTH))");
+  });
+
+  it("extractTokenNames returns the base of macros with offsets/format", () => {
+    expect(extractTokenNames("{{slot_start - 1d}} {{slot_end | year}}").sort()).toEqual(["slot_end", "slot_start"]);
+  });
+});
+
 describe("toDateTime64Param", () => {
   it("renders a UTC millisecond instant ClickHouse can parse", () => {
     expect(toDateTime64Param(Date.parse("2026-06-20T08:00:00.000Z"))).toBe("2026-06-20 08:00:00.000");

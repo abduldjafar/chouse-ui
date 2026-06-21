@@ -44,6 +44,7 @@ import {
 import { useCreateScheduledQuery, useUpdateScheduledQuery } from "./hooks";
 import { SQ_BTN_GHOST, SQ_BTN_PRIMARY } from "./lib";
 import { MultiSelect } from "./MultiSelect";
+import { MacrosHelp } from "./MacrosHelp";
 
 // Heavy Monaco editor — lazy so its chunk only loads when the builder opens.
 const MonacoSqlInput = lazy(() => import("./MonacoSqlInput"));
@@ -388,13 +389,16 @@ function SourceStep({ form, update, connectionName, preview, onValidate, validat
         <p className="text-[11px] text-paper-muted">Runs on your active connection, using its ClickHouse credentials.</p>
       </div>
       <div className={sectionCls}>
-        <Label className={labelCls}>Read-only SELECT</Label>
+        <div className="flex items-center justify-between">
+          <Label className={labelCls}>Read-only SELECT</Label>
+          <MacrosHelp />
+        </div>
         <Suspense fallback={<div className="grid h-[220px] place-items-center rounded-xs border border-ink-500 bg-ink-50 text-[11px] text-paper-muted">Loading editor…</div>}>
           <MonacoSqlInput value={form.query} onChange={(v) => update({ query: v })} height={220} />
         </Suspense>
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] text-paper-muted">
-            Window params: <code className="text-paper">{"{{slot_start}}"}</code>, <code className="text-paper">{"{{slot_end}}"}</code>, <code className="text-paper">{"{{prev_run_at}}"}</code> (UTC).
+            Window macros (UTC): <code className="text-paper">{"{{slot_start}}"}</code>, <code className="text-paper">{"{{slot_end}}"}</code> … <span className="text-paper-faint">ⓘ for shift / extract</span>
           </p>
           <Button variant="outline" className="h-7 shrink-0 rounded-xs font-mono text-[10px] uppercase tracking-[0.14em]" onClick={() => void onValidate()} disabled={validating}>
             {validating && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}

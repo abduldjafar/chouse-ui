@@ -8,7 +8,7 @@
  * for lazy loading so the heavy Monaco chunk only loads when the builder opens.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as monaco from "monaco-editor";
 import { toast } from "sonner";
 import { Wand2, Maximize2, Minimize2, Play, Loader2 } from "lucide-react";
@@ -24,6 +24,8 @@ import { usePreferencesStore } from "@/stores";
 import { initializeMonacoGlobally, createMonacoEditor } from "@/features/workspace/editor/monacoConfig";
 import { useTheme } from "@/components/common/theme-provider";
 import { cn } from "@/lib/utils";
+import { substituteMacros, previewMacros } from "./macros";
+import { MacrosHelp } from "./MacrosHelp";
 
 interface MonacoSqlInputProps {
   value: string;
@@ -33,24 +35,15 @@ interface MonacoSqlInputProps {
   className?: string;
 }
 
-/** Format a UTC instant as a ClickHouse DateTime64 expression for substitution. */
-function dt64(ms: number): string {
-  const iso = new Date(ms).toISOString().replace("T", " ").replace("Z", "");
-  return `toDateTime64('${iso}', 3, 'UTC')`;
-}
-
 /**
- * Replace the `{{…}}` window tokens with a concrete sample window (last 24h) so
+ * Compile the `{{…}}` window macros with a concrete sample window (last 24h) so
  * the query is valid ClickHouse for an ad-hoc test run. The real scheduler binds
  * these per slot — this is only for previewing results in the builder.
  */
 function substituteWindowTokens(sql: string): string {
   const now = Date.now();
   const dayAgo = now - 24 * 60 * 60 * 1000;
-  return sql
-    .replace(/\{\{\s*slot_start\s*\}\}/g, dt64(dayAgo))
-    .replace(/\{\{\s*slot_end\s*\}\}/g, dt64(now))
-    .replace(/\{\{\s*prev_run_at\s*\}\}/g, dt64(dayAgo));
+  return substituteMacros(sql, { slotStartMs: dayAgo, slotEndMs: now, prevRunAtMs: dayAgo });
 }
 
 /** One managed Monaco editor instance + its toolbar. */
@@ -197,6 +190,24 @@ function ResultsPanel({ outcome, error }: { outcome: RunOutcome | null; error: s
   );
 }
 
+/** Live preview of what each `{{…}}` macro resolves to (sample last-24h window). */
+function MacroPreview({ query }: { query: string }) {
+  const previews = useMemo(() => previewMacros(query), [query]);
+  if (previews.length === 0) return null;
+  return (
+    <div className="rounded-xs border border-ink-500 bg-ink-50 px-2 py-1.5">
+      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-paper-faint">Macro preview (sample 24h window)</p>
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        {previews.map((p) => (
+          <span key={p.macro} className="font-mono text-[10px]">
+            <span className="text-paper-faint">{p.macro}</span> <span className="text-paper-faint">=</span> <span className="text-paper">{p.value}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function MonacoSqlInput({ value, onChange, height = 220, className }: MonacoSqlInputProps) {
   const [expanded, setExpanded] = useState(false);
   const [running, setRunning] = useState(false);
@@ -249,7 +260,7 @@ export default function MonacoSqlInput({ value, onChange, height = 220, classNam
   };
 
   return (
-    <>
+    <div className="space-y-2">
       <MonacoEditorCore
         value={value}
         onChange={onChange}
@@ -266,13 +277,17 @@ export default function MonacoSqlInput({ value, onChange, height = 220, classNam
           </button>
         }
       />
+      <MacroPreview query={value} />
 
       {/* Glassy expand window — a nested dialog (portals to body, so it escapes
           the builder dialog's transform and fills the viewport). Test-runnable. */}
       <Dialog open={expanded} onOpenChange={setExpanded}>
         <DialogContent className="flex h-[82vh] w-[88vw] max-w-5xl flex-col gap-3 border-ink-500 bg-ink-100/85 p-4 backdrop-blur-xl">
           <DialogHeader>
-            <DialogTitle className="text-[14px] font-semibold text-paper">Read-only SELECT</DialogTitle>
+            <div className="flex items-center justify-between gap-2 pr-6">
+              <DialogTitle className="text-[14px] font-semibold text-paper">Read-only SELECT</DialogTitle>
+              <MacrosHelp />
+            </div>
             <p className="text-[11px] text-paper-muted">Run uses a sample last-24h window for {"{{slot_start}}"} / {"{{slot_end}}"} / {"{{prev_run_at}}"}.</p>
           </DialogHeader>
           <div className="flex min-h-0 flex-1 flex-col gap-2">
@@ -303,10 +318,11 @@ export default function MonacoSqlInput({ value, onChange, height = 220, classNam
                 </>
               }
             />
+            <MacroPreview query={value} />
             <ResultsPanel outcome={outcome} error={error} />
           </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
