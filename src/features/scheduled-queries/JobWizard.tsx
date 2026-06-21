@@ -297,22 +297,35 @@ export function JobWizard({ isOpen, onClose, job, prefill }: JobWizardProps) {
             Step {step + 1} of {steps.length} — {stepName}
           </DialogDescription>
           <div className="mt-4 flex items-center gap-2">
-            {steps.map((label, i) => (
-              <div key={label} className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded-full font-mono text-[10px]",
-                    i === step ? "bg-brand text-ink-50" : i < step ? "bg-emerald-600 text-ink-50" : "bg-ink-300 text-paper-faint",
-                  )}
-                >
-                  {i + 1}
-                </span>
-                <span className={cn("font-mono text-[10px] uppercase tracking-[0.14em]", i === step ? "text-paper" : "text-paper-faint")}>
-                  {label}
-                </span>
-                {i < steps.length - 1 && <span className="h-px w-4 bg-ink-400" aria-hidden />}
-              </div>
-            ))}
+            {steps.map((label, i) => {
+              // Editing a job → jump to any step freely; creating → only back to
+              // already-visited (validated) steps. Save re-validates server-side.
+              const canJump = Boolean(job) || i <= step;
+              return (
+                <div key={label} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => canJump && setStep(i)}
+                    disabled={!canJump}
+                    aria-current={i === step ? "step" : undefined}
+                    className={cn("flex items-center gap-2", canJump && i !== step ? "cursor-pointer" : "cursor-default")}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 items-center justify-center rounded-full font-mono text-[10px]",
+                        i === step ? "bg-brand text-ink-50" : i < step ? "bg-emerald-600 text-ink-50" : "bg-ink-300 text-paper-faint",
+                      )}
+                    >
+                      {i + 1}
+                    </span>
+                    <span className={cn("font-mono text-[10px] uppercase tracking-[0.14em]", i === step ? "text-paper" : "text-paper-faint", canJump && i !== step && "hover:text-paper")}>
+                      {label}
+                    </span>
+                  </button>
+                  {i < steps.length - 1 && <span className="h-px w-4 bg-ink-400" aria-hidden />}
+                </div>
+              );
+            })}
           </div>
         </DialogHeader>
 
